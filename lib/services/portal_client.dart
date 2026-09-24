@@ -29,6 +29,11 @@ class PortalClient {
   final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 8);
 
+  /// chkstatus 返回的 ss5（门户眼中本机 IP）/ ss1（本机 MAC），
+  /// 作为登录会话参数的可靠来源（多网卡时本地猜 IP 会选错网卡）。
+  String _chkIp = '';
+  String _chkMac = '';
+
   /// 关闭底层连接。
   void dispose() => _http.close();
 
@@ -45,8 +50,10 @@ class PortalClient {
     }
   }
 
-  /// GET 请求（禁止自动重定向），返回 `(statusCode, body(gbk), location)`，
+  /// GET 请求（禁止自动重定向），返回 `(statusCode, body, location)`，
   /// 失败时 statusCode 为 null。
+  /// 响应解码 UTF-8 优先（2026-09-24 实测门户按 UTF-8 返回，GBK 直解
+  /// 中文 msg 会变乱码），无效 UTF-8 时回退 GBK。
   Future<(int?, String, String)> _get(String url, {Duration? timeout}) async {
     try {
       final req = await _http.getUrl(Uri.parse(url));
@@ -55,7 +62,12 @@ class PortalClient {
       final resp = await req.close().timeout(timeout ?? this.timeout);
       final bytes = await resp.fold<List<int>>(
           <int>[], (acc, chunk) => acc..addAll(chunk));
-      final body = gbk.decode(bytes);
+      String body;
+      try {
+        body = utf8.decode(bytes);
+      } catch (_) {
+        body = gbk.decode(bytes);
+      }
       return (
         resp.statusCode,
         body,
@@ -67,12 +79,17 @@ class PortalClient {
   }
 
   /// 查询在线状态：true 在线 / false 未认证 / null 门户不可达。
+  /// 顺带缓存 ss5/ss1（门户眼中本机 IP/MAC，即使 result=0 也会返回）。
   Future<bool?> checkOnline() async {
     final url = 'http://$host/drcom/chkstatus?callback=dr1&jsVersion=4.X';
     final (code, body, _) = await _get(url, timeout: const Duration(seconds: 5));
     if (code == null) return null;
     final json = parseJsonp(body);
     if (json == null) return null;
+    final ss5 = json['ss5']?.toString() ?? '';
+    final ss1 = json['ss1']?.toString() ?? '';
+    if (ss5.isNotEmpty && ss5 != '-') _chkIp = ss5;
+    if (ss1.isNotEmpty && ss1 != '-') _chkMac = ss1;
     return json['result']?.toString() == '1';
   }
 
@@ -109,8 +126,11 @@ class PortalClient {
     String suffix,
     Map<String, String> session,
   ) async {
-    final mac = session['wlanusermac'] ?? '';
-    final ip = session['wlanuserip'] ?? await localIPv4() ?? '';
+    // 会话参数优先级：AC 劫持 > chkstatus 的 ss5/ss1 > 本机网卡。
+    // 实测（2026-09-24）：插着有线网卡时劫持抓不到参数，localIPv4()
+    // 会选错网卡，门户返回 ret_code=8「Portal协议认证超时」。
+    final mac = session['wlanusermac'] ?? _chkMac;
+    final ip = session['wlanuserip'] ?? (_chkIp.isNotEmpty ? _chkIp : await localIPv4() ?? '');
     final acname = session['wlanacname'] ?? '';
     // 实测裸账号可登录；",0," 前缀会被服务器判定为账号不存在。
     final userAccount = '$account$suffix';
@@ -139,14 +159,22 @@ class PortalClient {
 }
 
 /// 获取本机局域网 IPv4（排除回环与链路本地地址）。
+/// 多网卡时优先 WLAN/Wi-Fi 适配器（本应用面向校园网 WiFi 场景），
+/// 避免选中有线/虚拟网卡导致门户认证按错误源 IP 处理。
 Future<String?> localIPv4() async {
   final interfaces = await NetworkInterface.list(
       includeLoopback: false, type: InternetAddressType.IPv4);
+  String? firstAny;
   for (final it in interfaces) {
     for (final addr in it.addresses) {
       final s = addr.address;
-      if (!s.startsWith('169.254.') && !s.startsWith('127.')) return s;
+      if (s.startsWith('169.254.') || s.startsWith('127.')) continue;
+      if (RegExp(r'^(wlan|wi-?fi|无线)', caseSensitive: false)
+          .hasMatch(it.name)) {
+        return s;
+      }
+      firstAny ??= s;
     }
   }
-  return null;
+  return firstAny;
 }

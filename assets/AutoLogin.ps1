@@ -1,12 +1,18 @@
 # =====================================================================
 # CampusNetAutoLogin - Silent campus network login (Dr.COM / eportal v4)
 #
+# Multi-WiFi: config.json keeps a profile per SSID (account/suffix) and
+# exactly ONE autoLoginSsid. Passwords are DPAPI-encrypted per SSID in
+# cred.json. Boot/-Once mode only logs in when the machine is connected
+# to the autoLoginSsid WiFi.
+#
 # Modes:
-#   (none)      Boot mode  : wait for network, detect state, silent login
+#   (none)      Boot mode  : wait for autoLoginSsid WiFi, then silent login
 #   -Once       Single mode: one login attempt, prints [OK]/[ERR]/[INFO]
-#   -Save       Save mode  : reads JSON {"account","password","suffix",
-#                            "host","eport"} from stdin, DPAPI-encrypts
-#                            the password, writes config.json + cred.bin
+#   -Save       Save mode  : reads JSON {"host","eport","autoLoginSsid",
+#                            "profiles":[{"ssid","account","suffix",
+#                            "password"}]} from stdin; empty password
+#                            keeps the previously saved one.
 #   -Install    Register   : creates Scheduled Task (logon trigger)
 #   -Uninstall  Remove     : deletes the Scheduled Task
 #   -Status     Status     : prints saved config / task / online state
@@ -25,19 +31,27 @@ $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Net.Http
 
-$TaskName = 'CampusNetAutoLogin'
-$Dir      = Join-Path $env:APPDATA 'CampusNetAutoLogin'
-$Script   = Join-Path $Dir 'AutoLogin.ps1'
-$LogFile  = Join-Path $Dir 'autologin.log'
-$CfgFile  = Join-Path $Dir 'config.json'
-$CredFile = Join-Path $Dir 'cred.bin'
+$TaskName   = 'CampusNetAutoLogin'
+$Dir        = Join-Path $env:APPDATA 'CampusNetAutoLogin'
+$Script     = Join-Path $Dir 'AutoLogin.ps1'
+$LogFile    = Join-Path $Dir 'autologin.log'
+$CfgFile    = Join-Path $Dir 'config.json'
+$CredFile   = Join-Path $Dir 'cred.bin'      # legacy single-password file
+$CredJson   = Join-Path $Dir 'cred.json'     # per-SSID DPAPI passwords
 
 # portal server config (defaults, updated by -Save / Load-Config)
-$script:Host_    = '172.16.200.11'
-$script:EPort    = 801
-$script:Account  = ''
-$script:Suffix   = ''
+$script:Host_         = '172.16.200.11'
+$script:EPort         = 801
+$script:AutoLoginSsid = ''
+$script:Profiles      = @{}   # ssid -> @{ account = ''; suffix = '' }
 $script:PlainPassword = $null
+$script:Account       = ''    # resolved from the autoLogin profile
+$script:Suffix        = ''
+$script:SessMac       = ''    # session params captured from the AC hijack
+$script:SessAcname    = ''
+$script:SessSsid      = ''
+$script:ChkIp         = ''    # ss5/ss1 from chkstatus (portal-side view of us)
+$script:ChkMac        = ''
 
 function Log([string]$msg) {
     if (-not (Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir | Out-Null }
@@ -54,23 +68,35 @@ function Emit([string]$level, [string]$msg) {
     Log ("[{0}] {1}" -f $level, $msg)
 }
 
-function Load-Config {
-    if (Test-Path $CfgFile) {
-        try {
-            $cfg = Get-Content $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($cfg.host)    { $script:Host_   = [string]$cfg.host }
-            if ($cfg.eport)   { $script:EPort   = [int]$cfg.eport }
-            if ($cfg.account) { $script:Account = [string]$cfg.account }
-            if ($null -ne $cfg.suffix) { $script:Suffix = [string]$cfg.suffix }
-        } catch { }
-    }
+# ---------------------------------------------------------------
+# Cred store: cred.json = { "<ssid>": "<DPAPI-encrypted password>" }
+# ---------------------------------------------------------------
+function Get-CredMap {
+    if (-not (Test-Path $CredJson)) { return @{} }
+    try {
+        $obj = Get-Content $CredJson -Raw -Encoding UTF8 | ConvertFrom-Json
+        $map = @{}
+        foreach ($p in $obj.PSObject.Properties) { $map[$p.Name] = [string]$p.Value }
+        return $map
+    } catch { return @{} }
 }
 
-function Get-SavedPassword {
-    if (-not (Test-Path $CredFile)) { return $null }
+function Set-CredPassword([string]$ssid, [string]$plain) {
+    if (-not $ssid) { return }
+    $map = Get-CredMap
     try {
-        $enc = (Get-Content $CredFile -Raw).Trim()
-        if (-not $enc) { return $null }
+        $sec = ConvertTo-SecureString $plain -AsPlainText -Force
+        $map[$ssid] = ConvertFrom-SecureString $sec
+        ($map | ConvertTo-Json -Compress) | Set-Content -Path $CredJson -Encoding UTF8
+    } catch { }
+}
+
+function Get-SavedPassword([string]$ssid) {
+    if (-not $ssid) { return $null }
+    $map = Get-CredMap
+    $enc = $map[$ssid]
+    if (-not $enc) { return $null }
+    try {
         $sec = ConvertTo-SecureString $enc
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
         try {
@@ -82,9 +108,102 @@ function Get-SavedPassword {
 }
 
 # ---------------------------------------------------------------
+# Config: profiles + autoLoginSsid (+ harvested session params).
+# Legacy single-account config/cred.bin is migrated on first load.
+# ---------------------------------------------------------------
+function Write-ConfigFile {
+    $cfg = [ordered]@{
+        host          = $script:Host_
+        eport         = $script:EPort
+        autoLoginSsid = $script:AutoLoginSsid
+    }
+    $prof = @{}
+    foreach ($k in $script:Profiles.Keys) {
+        $prof[$k] = @{ account = [string]$script:Profiles[$k]['account']; suffix = [string]$script:Profiles[$k]['suffix'] }
+    }
+    $cfg['profiles'] = $prof
+    # session params: freshly hijacked values win, else keep previous ones
+    $old = $null
+    if (Test-Path $CfgFile) {
+        try { $old = Get-Content $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+    }
+    if ($script:SessMac)         { $cfg['mac'] = $script:SessMac }
+    elseif ($old -and $old.mac)  { $cfg['mac'] = [string]$old.mac }
+    if ($script:SessAcname)          { $cfg['acname'] = $script:SessAcname }
+    elseif ($old -and $old.acname)   { $cfg['acname'] = [string]$old.acname }
+    if ($script:SessSsid)        { $cfg['ssid'] = $script:SessSsid }
+    elseif ($old -and $old.ssid) { $cfg['ssid'] = [string]$old.ssid }
+    ($cfg | ConvertTo-Json -Depth 5 -Compress) | Set-Content -Path $CfgFile -Encoding UTF8
+}
+
+function Load-Config {
+    if (-not (Test-Path $CfgFile)) { return }
+    try {
+        $cfg = Get-Content $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($cfg.host)          { $script:Host_ = [string]$cfg.host }
+        if ($cfg.eport)         { $script:EPort = [int]$cfg.eport }
+        if ($null -ne $cfg.autoLoginSsid) { $script:AutoLoginSsid = [string]$cfg.autoLoginSsid }
+        if ($null -ne $cfg.profiles) {
+            foreach ($p in $cfg.profiles.PSObject.Properties) {
+                $script:Profiles[$p.Name] = @{
+                    account = [string]$p.Value.account
+                    suffix  = [string]$p.Value.suffix
+                }
+            }
+        }
+    } catch { }
+    Migrate-Legacy $cfg
+}
+
+# Legacy (pre-multi-WiFi) layout: top-level account/suffix in config.json
+# and one DPAPI password in cred.bin. Migrate them into profiles + cred.json.
+function Migrate-Legacy($cfg) {
+    $migrated = $false
+    $ssid = ''
+    if ($cfg -and $cfg.ssid) { $ssid = [string]$cfg.ssid }   # hijacked campus ssid
+    if (-not $ssid) { $ssid = 'LNPC-STU-5G' }
+
+    if ((Test-Path $CredFile) -and -not (Test-Path $CredJson)) {
+        $enc = ''
+        try { $enc = (Get-Content $CredFile -Raw).Trim() } catch { }
+        if ($enc) {
+            $map = @{}
+            $map[$ssid] = $enc
+            ($map | ConvertTo-Json -Compress) | Set-Content -Path $CredJson -Encoding UTF8
+            $migrated = $true
+        }
+    }
+    if ($cfg -and $cfg.account -and -not $script:Profiles.ContainsKey($ssid)) {
+        $script:Profiles[$ssid] = @{ account = [string]$cfg.account; suffix = [string]$cfg.suffix }
+        if (-not $script:AutoLoginSsid) { $script:AutoLoginSsid = $ssid }
+        $migrated = $true
+    }
+    if ($migrated) { Write-ConfigFile }
+}
+
+# ---------------------------------------------------------------
+# Current WLAN state via netsh.
+# ---------------------------------------------------------------
+function Get-CurrentSsid {
+    try {
+        $out = (& netsh.exe wlan show interfaces 2>$null) -join "`n"
+        # matches "    SSID : xxx" but not "BSSID" (which starts with B)
+        if ($out -match '(?m)^\s*SSID\s*:\s*(.+?)\s*$') { return $Matches[1] }
+    } catch { }
+    return ''
+}
+
+function Connect-Wlan([string]$ssid) {
+    if (-not $ssid) { return }
+    try { & netsh.exe wlan connect name="$ssid" | Out-Null } catch { }
+}
+
+# ---------------------------------------------------------------
 # HTTP helper: GET with redirects disabled.
-# Returns @{ Code=int; Body=string(gbk-decoded); Location=string }
+# Returns @{ Code=int; Body=string; Location=string }
 # or $null on any failure/timeout.
+# Body decode: UTF-8 first (portal login replies in UTF-8, verified
+# 2026-09-24: GBK decode turns msg into mojibake), fallback GBK.
 # ---------------------------------------------------------------
 function Invoke-NoRedirect([string]$url, [int]$timeoutMs = 8000) {
     $client = $null
@@ -98,7 +217,12 @@ function Invoke-NoRedirect([string]$url, [int]$timeoutMs = 8000) {
         if ($task.Status -ne [System.Threading.Tasks.TaskStatus]::RanToCompletion) { return $null }
         $resp = $task.Result
         $bytes = $resp.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
-        $body = [System.Text.Encoding]::GetEncoding(936).GetString($bytes)
+        try {
+            $strictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+            $body = $strictUtf8.GetString($bytes)
+        } catch {
+            $body = [System.Text.Encoding]::GetEncoding(936).GetString($bytes)
+        }
         $loc = ''
         if ($null -ne $resp.Headers.Location) { $loc = $resp.Headers.Location.ToString() }
         return @{ Code = [int]$resp.StatusCode; Body = $body; Location = $loc }
@@ -127,6 +251,15 @@ function Test-Online {
     if ($null -eq $r) { return $null }
     $json = Parse-Jsonp $r.Body
     if ($null -eq $json) { return $null }
+    # chkstatus reports the portal-side view of this client: ss5 = our IP,
+    # ss1 = our MAC. More reliable than hijack capture / guessing the local
+    # NIC (with multiple NICs the wrong one gets picked, which triggers
+    # ret_code=8 "Portal timeout"). Both fields are present even when
+    # result=0 (not online yet).
+    try {
+        if ($json.ss5) { $script:ChkIp = [string]$json.ss5 }
+        if ($json.ss1) { $script:ChkMac = [string]$json.ss1 }
+    } catch { }
     if ([string]$json.result -eq '1') { return $true }
     return $false
 }
@@ -172,8 +305,26 @@ function Get-LocalIPv4 {
     return ''
 }
 
+# Source IP the OS would use to reach the portal (UDP connect picks the
+# route without sending any packet). Get-LocalIPv4 picks the wrong NIC
+# when wired / USB-tethering / virtual adapters grab the default route,
+# which made the portal return ret_code=8.
+function Get-PortalSourceIP {
+    try {
+        $sock = New-Object System.Net.Sockets.Socket(
+            [System.Net.Sockets.AddressFamily]::InterNetwork,
+            [System.Net.Sockets.SocketType]::Dgram,
+            [System.Net.Sockets.ProtocolType]::Udp)
+        $sock.Connect([System.Net.IPAddress]::Parse($script:Host_), 80)
+        $ip = ([string]$sock.LocalEndPoint) -replace ':\d+$', ''
+        $sock.Close()
+        if ($ip -and $ip -notmatch '^(169\.254|127\.)') { return $ip }
+    } catch { }
+    return Get-LocalIPv4
+}
+
 # ---------------------------------------------------------------
-# Portal login (eportal v4, login_method=1).
+# Portal login (eportal v4, login_method=1) for the autoLogin profile.
 # user_account = account + suffix (bare account; verified 2026-09-24.
 # The ",0," prefix makes the server return "account not found".)
 # ---------------------------------------------------------------
@@ -184,7 +335,14 @@ function Invoke-Login([hashtable]$sessParams) {
         if ($sessParams['ip'])     { $ip = $sessParams['ip'] }
         if ($sessParams['acname']) { $acname = $sessParams['acname'] }
     }
-    if (-not $ip) { $ip = Get-LocalIPv4 }
+    # Session param priority: AC hijack > chkstatus ss5/ss1 > route source IP.
+    # Verified 2026-09-24: with a wired NIC online the hijack capture fails
+    # and local NIC guessing picks the wrong adapter, so the portal answers
+    # ret_code=8 "Portal protocol auth timeout".
+    if (-not $ip) {
+        if ($script:ChkIp) { $ip = $script:ChkIp } else { $ip = Get-PortalSourceIP }
+    }
+    if (-not $mac -and $script:ChkMac) { $mac = $script:ChkMac }
 
     # Bare account works; the ",0," prefix causes "account not found".
     $userAccount = $script:Account + $script:Suffix
@@ -201,7 +359,11 @@ function Invoke-Login([hashtable]$sessParams) {
     $r = Invoke-NoRedirect $url 8000
     if ($null -eq $r) { return @{ ok = $false; msg = 'PORTAL_UNREACHABLE' } }
     $json = Parse-Jsonp $r.Body
-    if ($null -eq $json) { return @{ ok = $false; msg = 'BAD_RESPONSE' } }
+    if ($null -eq $json) {
+        $snippet = ''
+        if ($r.Body) { $snippet = ($r.Body -replace '\s+', ' ').Substring(0, [Math]::Min(120, $r.Body.Length)) }
+        return @{ ok = $false; msg = ('BAD_RESPONSE code={0} len={1} body={2}' -f $r.Code, $r.Body.Length, $snippet) }
+    }
     if ([string]$json.result -eq '1' -or [string]$json.result -eq 'ok') {
         return @{ ok = $true; msg = 'LOGIN_OK' }
     }
@@ -216,11 +378,10 @@ function Invoke-Login([hashtable]$sessParams) {
 function Save-SessionParams([hashtable]$p) {
     if (-not $p) { return }
     try {
-        $cfg = @{ host = $script:Host_; eport = $script:EPort; account = $script:Account; suffix = $script:Suffix }
-        if ($p['mac'])    { $cfg['mac'] = $p['mac'] }
-        if ($p['acname']) { $cfg['acname'] = $p['acname'] }
-        if ($p['ssid'])   { $cfg['ssid'] = $p['ssid'] }
-        ($cfg | ConvertTo-Json -Compress) | Set-Content -Path $CfgFile -Encoding UTF8
+        if ($p['mac'])    { $script:SessMac = $p['mac'] }
+        if ($p['acname']) { $script:SessAcname = $p['acname'] }
+        if ($p['ssid'])   { $script:SessSsid = $p['ssid'] }
+        Write-ConfigFile
     } catch { }
 }
 
@@ -253,29 +414,48 @@ function Login-Cycle {
     return $false
 }
 
+# Resolve the autoLogin profile: account/suffix/password must exist.
+function Select-AutoLoginProfile {
+    if (-not $script:AutoLoginSsid) {
+        Emit 'ERR' 'NO_AUTOLOGIN_WIFI'
+        return $false
+    }
+    $prof = $script:Profiles[$script:AutoLoginSsid]
+    if ($null -eq $prof -or -not $prof['account']) {
+        Emit 'ERR' ('NO_PROFILE_FOR_SSID: {0}' -f $script:AutoLoginSsid)
+        return $false
+    }
+    $script:Account = [string]$prof['account']
+    $script:Suffix  = [string]$prof['suffix']
+    $script:PlainPassword = Get-SavedPassword $script:AutoLoginSsid
+    if (-not $script:PlainPassword) {
+        Emit 'ERR' ('NO_SAVED_PASSWORD: {0}' -f $script:AutoLoginSsid)
+        return $false
+    }
+    return $true
+}
+
 # ---------------------------------------------------------------
 # Modes
 # ---------------------------------------------------------------
 if ($Save) {
+    Load-Config   # migrate legacy single-account config first
     $raw = [Console]::In.ReadToEnd()
     if (-not (Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir | Out-Null }
     try { $req = $raw | ConvertFrom-Json } catch { Emit 'ERR' 'INVALID_INPUT'; exit 1 }
-    if (-not $req.account -or $null -eq $req.password) { Emit 'ERR' 'MISSING_FIELDS'; exit 1 }
     try {
-        $sec = ConvertTo-SecureString ([string]$req.password) -AsPlainText -Force
-        $enc = ConvertFrom-SecureString $sec
-        Set-Content -Path $CredFile -Value $enc -Encoding ASCII
-        $cfg = @{ host = [string]$req.host; eport = [int]$req.eport; account = [string]$req.account; suffix = [string]$req.suffix }
-        if (Test-Path $CfgFile) {
-            # keep previously harvested session params
-            try {
-                $old = Get-Content $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($old.mac)    { $cfg['mac'] = [string]$old.mac }
-                if ($old.acname) { $cfg['acname'] = [string]$old.acname }
-                if ($old.ssid)   { $cfg['ssid'] = [string]$old.ssid }
-            } catch { }
+        if ($req.host)  { $script:Host_ = [string]$req.host }
+        if ($req.eport) { $script:EPort = [int]$req.eport }
+        if ($null -ne $req.autoLoginSsid) { $script:AutoLoginSsid = [string]$req.autoLoginSsid }
+        if ($null -ne $req.profiles) {
+            foreach ($p in $req.profiles) {
+                $ssid = [string]$p.ssid
+                if (-not $ssid -or -not [string]$p.account) { continue }
+                $script:Profiles[$ssid] = @{ account = [string]$p.account; suffix = [string]$p.suffix }
+                if ([string]$p.password) { Set-CredPassword $ssid ([string]$p.password) }
+            }
         }
-        ($cfg | ConvertTo-Json -Compress) | Set-Content -Path $CfgFile -Encoding UTF8
+        Write-ConfigFile
         Emit 'OK' 'SAVED'
         exit 0
     } catch {
@@ -294,7 +474,7 @@ function Test-IsAdmin {
 # (RunLevel Limited) as the current user at logon.
 function Register-TaskInternal {
     Load-Config
-    if (-not $script:Account) { throw 'NO_SAVED_CONFIG' }
+    if (-not (Select-AutoLoginProfile)) { throw 'NO_SAVED_CONFIG' }
     if (-not (Test-Path $Script)) { throw 'SCRIPT_NOT_FOUND' }
     $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $action = New-ScheduledTaskAction -Execute $psExe -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $Script)
@@ -318,7 +498,7 @@ if ($InstallElevated) {
 
 if ($Install) {
     Load-Config
-    if (-not $script:Account) { Emit 'ERR' 'NO_SAVED_CONFIG'; exit 1 }
+    if (-not (Select-AutoLoginProfile)) { exit 1 }
     if (-not (Test-Path $Script)) { Emit 'ERR' 'SCRIPT_NOT_FOUND'; exit 1 }
 
     if (Test-IsAdmin) {
@@ -367,24 +547,25 @@ if ($Uninstall) {
 
 if ($Status) {
     Load-Config
-    $pw = Get-SavedPassword
-    $hasPw = ($null -ne $pw -and $pw.Length -gt 0)
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     $state = Test-Online
     $online = if ($state -eq $true) { 'yes' } elseif ($state -eq $false) { 'no' } else { 'unknown' }
-    Emit 'INFO' ('CONFIG account={0} suffix={1} host={2} eport={3} password_saved={4} task={5} online={6}' -f `
-        $script:Account, $script:Suffix, $script:Host_, $script:EPort, $hasPw, [bool]$task, $online)
+    $profNames = ($script:Profiles.Keys | ForEach-Object { $_ + '(pw=' + [bool](Get-SavedPassword $_) + ')' }) -join ','
+    Emit 'INFO' ('CONFIG autoLoginSsid={0} currentSsid={1} profiles={2} task={3} online={4}' -f `
+        $script:AutoLoginSsid, (Get-CurrentSsid), $profNames, [bool]$task, $online)
     exit 0
 }
 
 # ---------------------------------------------------------------
-# -Once : single cycle, exit 0 on success / 1 on failure
+# -Once : single cycle, exit 0 on success / 1 on failure.
+# Only runs when connected to the designated auto-login WiFi.
 # ---------------------------------------------------------------
 if ($Once) {
     Load-Config
-    $script:PlainPassword = Get-SavedPassword
-    if (-not $script:Account -or -not $script:PlainPassword) {
-        Emit 'ERR' 'NO_SAVED_CONFIG'
+    if (-not (Select-AutoLoginProfile)) { exit 1 }
+    $cur = Get-CurrentSsid
+    if ($cur -ne $script:AutoLoginSsid) {
+        Emit 'ERR' ('SSID_MISMATCH current={0} expect={1}' -f $cur, $script:AutoLoginSsid)
         exit 1
     }
     if (Login-Cycle) { exit 0 } else { exit 1 }
@@ -392,17 +573,29 @@ if ($Once) {
 
 # ---------------------------------------------------------------
 # Boot mode (default, from Scheduled Task):
-# wait for network up to 3 min, then run cycles with retries.
+# wait for the designated WiFi (try to connect if Windows has a saved
+# profile), then run login cycles with retries.
 # ---------------------------------------------------------------
 Load-Config
-$script:PlainPassword = Get-SavedPassword
-if (-not $script:Account -or -not $script:PlainPassword) {
-    Emit 'ERR' 'NO_SAVED_CONFIG'
+if (-not (Select-AutoLoginProfile)) { exit 1 }
+
+Emit 'INFO' ('BOOT_START ssid={0}' -f $script:AutoLoginSsid)
+$deadline = (Get-Date).AddMinutes(3)
+$onTarget = $false
+while ((Get-Date) -lt $deadline) {
+    $cur = Get-CurrentSsid
+    if ($cur -eq $script:AutoLoginSsid) { $onTarget = $true; break }
+    Connect-Wlan $script:AutoLoginSsid   # no-op if no saved wlan profile
+    Start-Sleep -Seconds 4
+}
+if (-not $onTarget) {
+    Emit 'ERR' ('WIFI_NOT_CONNECTED: {0}' -f $script:AutoLoginSsid)
     exit 1
 }
+Emit 'INFO' ('WLAN_CONNECTED: {0}' -f $script:AutoLoginSsid)
 
-Emit 'INFO' 'BOOT_START'
-$deadline = (Get-Date).AddMinutes(3)
+# wait for portal reachability (WiFi may still be settling)
+$deadline = (Get-Date).AddMinutes(1)
 while ((Get-Date) -lt $deadline) {
     $probe = Invoke-NoRedirect ('http://{0}/drcom/chkstatus?callback=dr1&jsVersion=4.X' -f $script:Host_) 4000
     if ($null -ne $probe) { break }
