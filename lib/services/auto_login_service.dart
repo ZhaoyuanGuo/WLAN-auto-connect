@@ -218,11 +218,58 @@ class AutoLoginService {
   }
 
   /// 单次静默登录（使用已保存账号）。
-  Future<(bool, List<String>)> loginOnce() async {
-    final r = await _runPs(['-Once'], timeout: const Duration(seconds: 90));
+  /// [ssid] 非空时用该 WiFi 的已存档案（不限自启 WiFi），为空时用自启 WiFi。
+  Future<(bool, List<String>)> loginOnceFor(String ssid) async {
+    final args =
+        ssid.isEmpty ? <String>['-Once'] : <String>['-Once', '-Ssid', ssid];
+    final r = await _runPs(args, timeout: const Duration(seconds: 90));
     final text = r.$2.trim();
     final lines = text.isEmpty ? <String>[] : text.split('\n');
     final ok = r.$1 == 0 && lines.any((l) => l.startsWith('[OK]'));
     return (ok, lines);
   }
+
+  Future<(bool, List<String>)> loginOnce() => loginOnceFor('');
+
+  // ---------------- 强制门户弹窗屏蔽（NCSI 探测） ----------------
+
+  static const _popupPolKey =
+      r'HKLM\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator';
+  static const _popupNlaKey =
+      r'HKLM\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet';
+
+  /// 读取 HKLM 下某个 REG_DWORD 值，缺失/失败返回 null。
+  Future<int?> _regDword(String key, String name) async {
+    try {
+      final r = await Process.run('reg', ['query', key, '/v', name]);
+      if (r.exitCode != 0) return null;
+      final m =
+          RegExp(r'0x([0-9a-fA-F]+)').firstMatch(r.stdout as String);
+      return m == null ? null : int.parse(m.group(1)!, radix: 16);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 弹窗屏蔽状态：NCSI 主动探测被任一键禁用即视为已屏蔽。
+  Future<bool> popupFixEnabled() async {
+    final pol = await _regDword(_popupPolKey, 'NoActiveProbe');
+    if (pol == 1) return true;
+    final nla = await _regDword(_popupNlaKey, 'EnableActiveProbing');
+    return nla == 0;
+  }
+
+  Future<(bool, String)> _runPopupMode(List<String> args) async {
+    final r = await _runPs(args, timeout: const Duration(minutes: 5));
+    final text = r.$2.trim();
+    if (text.contains('[OK]')) return (true, 'POPUP_FIXED');
+    final i = text.indexOf('[ERR]');
+    return (false, i >= 0 ? text.substring(i + 5).trim() : 'POPUP_FIX_FAILED');
+  }
+
+  /// 屏蔽连接后自动弹出认证网页/MSN（禁用 NCSI 主动探测，弹 UAC）。
+  Future<(bool, String)> fixPopup() => _runPopupMode(['-FixPopup']);
+
+  /// 恢复系统默认网络探测。
+  Future<(bool, String)> undoPopup() => _runPopupMode(['-UndoPopup']);
 }

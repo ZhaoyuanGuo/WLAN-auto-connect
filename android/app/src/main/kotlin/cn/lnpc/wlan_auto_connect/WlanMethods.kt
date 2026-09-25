@@ -1,0 +1,244 @@
+package cn.lnpc.wlan_auto_connect
+
+import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSuggestion
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.registerReceiver
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
+
+/// 提供给 Flutter 的 Android WLAN 能力：
+/// - scan：扫描可见 WiFi（需定位权限；fresh=true 时等待一次系统刷新）
+/// - currentSsid：当前连接的 SSID
+/// - openWifiPanel：打开系统 WLAN 面板（Android 10+ 无法静默连网）
+/// - suggestNetwork：注册开放网络建议，帮助系统自动连接校园网
+object WlanMethods {
+    private const val ERR_NO_PERMISSION = "NO_PERMISSION"
+    private const val PERMISSION_REQUEST_CODE = 4321
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /// 待回复的权限请求结果（requestPermissions 异步回调）。
+    private var pendingPermissionResult: MethodChannel.Result? = null
+
+    fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "scan" -> {
+                val fresh = call.argument<Boolean>("fresh") ?: false
+                scan(context.applicationContext, fresh, result)
+            }
+            "currentSsid" -> {
+                if (!hasLocation(context)) {
+                    result.error(ERR_NO_PERMISSION, "缺少位置权限", null)
+                    return
+                }
+                result.success(currentSsid(context.applicationContext))
+            }
+            "openWifiPanel" -> {
+                openWifiPanel(context.applicationContext)
+                result.success(true)
+            }
+            "suggestNetwork" -> {
+                val ssid = call.argument<String>("ssid") ?: ""
+                result.success(suggestNetwork(context.applicationContext, ssid))
+            }
+            "requestPermissions" -> {
+                requestPermissions(context, result)
+            }
+            "isLocationServiceEnabled" -> {
+                result.success(isLocationServiceEnabled(context.applicationContext))
+            }
+            "ensurePortalDetectionOff" -> {
+                result.success(ensurePortalDetectionOff(context.applicationContext))
+            }
+            else -> result.notImplemented()
+        }
+    }
+
+    /// 请求定位 +（Android 13+）附近设备权限；已全部授予时直接返回 true。
+    private fun requestPermissions(context: Context, result: MethodChannel.Result) {
+        val perms = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+        val missing = perms.filter {
+            ContextCompat.checkSelfPermission(context, it) !=
+                    PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            result.success(true)
+            return
+        }
+        val activity = context as? android.app.Activity
+        if (activity == null) {
+            result.success(false)
+            return
+        }
+        pendingPermissionResult = result
+        activity.requestPermissions(missing.toTypedArray(), PERMISSION_REQUEST_CODE)
+    }
+
+    /// MainActivity.onRequestPermissionsResult 转发；返回 true 表示已消费。
+    fun handlePermissionResult(requestCode: Int, grantResults: IntArray): Boolean {
+        if (requestCode != PERMISSION_REQUEST_CODE) return false
+        val pending = pendingPermissionResult
+        pendingPermissionResult = null
+        pending?.success(
+            grantResults.isNotEmpty() && grantResults.all {
+                it == PackageManager.PERMISSION_GRANTED
+            }
+        )
+        return true
+    }
+
+    /// 系统定位服务是否开启（扫描 WiFi / 读取 SSID 需要它）。
+    private fun isLocationServiceEnabled(context: Context): Boolean {
+        return try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE)
+                    as android.location.LocationManager
+            lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                    lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        } catch (e: Exception) {
+            true
+        }
+    }
+
+    private fun hasLocation(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+
+    private fun wifiManager(context: Context): WifiManager =
+        context.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+    fun currentSsid(context: Context): String {
+        val info = try {
+            wifiManager(context).connectionInfo
+        } catch (e: SecurityException) {
+            null
+        } ?: return ""
+        val ssid = info.ssid?.removeSurrounding("\"") ?: ""
+        return if (ssid.isEmpty() || ssid == "<unknown ssid>") "" else ssid
+    }
+
+    private fun scan(context: Context, fresh: Boolean, result: MethodChannel.Result) {
+        if (!hasLocation(context)) {
+            result.error(ERR_NO_PERMISSION, "缺少位置权限", null)
+            return
+        }
+        // 通道回调在主线程，扫描等待放后台线程执行，结果经 Handler 回投主线程
+        thread {
+            var error: String? = null
+            val list = mutableListOf<Map<String, Any>>()
+            try {
+                if (fresh) {
+                    // 等待一次 SCAN_RESULTS_AVAILABLE_ACTION（系统限流时最多等 2.5 秒）
+                    val latch = CountDownLatch(1)
+                    val receiver = object : BroadcastReceiver() {
+                        override fun onReceive(c: Context?, i: Intent?) {
+                            latch.countDown()
+                        }
+                    }
+                    val filter = IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
+                    registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+                    try {
+                        wifiManager(context).startScan()
+                        latch.await(2500, TimeUnit.MILLISECONDS)
+                    } finally {
+                        try {
+                            context.unregisterReceiver(receiver)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                val cur = currentSsid(context)
+                list.addAll(
+                    wifiManager(context).scanResults
+                        .filter { !it.SSID.isNullOrEmpty() }
+                        .groupBy { it.SSID }
+                        .map { (ssid, items) ->
+                            val best = items.maxOf { it.level }
+                            mapOf(
+                                "ssid" to ssid,
+                                "signal" to WifiManager.calculateSignalLevel(best, 100),
+                                "connected" to (ssid == cur),
+                            )
+                        }
+                        .sortedByDescending { it["signal"] as Int }
+                )
+            } catch (e: SecurityException) {
+                error = ERR_NO_PERMISSION
+            } catch (e: Exception) {
+                // 返回空列表，由 Dart 层提示
+            }
+            mainHandler.post {
+                if (error != null) result.error(error, "缺少位置权限", null)
+                else result.success(list)
+            }
+        }
+    }
+
+    private fun openWifiPanel(context: Context) {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Intent(Settings.Panel.ACTION_WIFI)
+        } else {
+            Intent(Settings.ACTION_WIFI_SETTINGS)
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    /// 注册开放网络建议（Android 10+ 无法直接连接，由系统在发现该网络时提示/自动连接）。
+    private fun suggestNetwork(context: Context, ssid: String): Boolean {
+        if (ssid.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        return try {
+            val suggestion = WifiNetworkSuggestion.Builder().setSsid(ssid).build()
+            wifiManager(context).addNetworkSuggestions(listOf(suggestion)) ==
+                    WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /// 自动关闭系统联网检测（captive portal）：连接开放网络后系统检测到门户
+    /// 认证会自动拉起浏览器，与本应用的静默登录抢戏。认证由本应用直接向
+    /// 门户发 HTTP 请求完成，无需系统代劳，故直接关闭检测。
+    /// 需 WRITE_SECURE_SETTINGS 权限（adb pm grant 授予，一次永久有效）。
+    /// 返回状态：already_off / disabled / no_permission / error:<msg>
+    private fun ensurePortalDetectionOff(context: Context): String {
+        return try {
+            val cr = context.contentResolver
+            val detection = Settings.Global.getInt(
+                cr, "captive_portal_detection_enabled", 1
+            )
+            val mode = Settings.Global.getInt(cr, "captive_portal_mode", 1)
+            if (detection == 0 && mode == 0) {
+                "already_off"
+            } else {
+                Settings.Global.putInt(cr, "captive_portal_detection_enabled", 0)
+                Settings.Global.putInt(cr, "captive_portal_mode", 0)
+                "disabled"
+            }
+        } catch (e: SecurityException) {
+            "no_permission"
+        } catch (e: Exception) {
+            "error:${e.message}"
+        }
+    }
+}

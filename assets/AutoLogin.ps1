@@ -9,10 +9,16 @@
 # Modes:
 #   (none)      Boot mode  : wait for autoLoginSsid WiFi, then silent login
 #   -Once       Single mode: one login attempt, prints [OK]/[ERR]/[INFO]
+#                 Optional -Ssid X: use the saved profile of SSID X
+#                 instead of the auto-login WiFi.
 #   -Save       Save mode  : reads JSON {"host","eport","autoLoginSsid",
 #                            "profiles":[{"ssid","account","suffix",
 #                            "password"}]} from stdin; empty password
 #                            keeps the previously saved one.
+#   -FixPopup   Popup fix  : disable Windows NCSI active probing so the
+#                            captive-portal auto-opened browser (MSN)
+#                            no longer pops up. Self-elevates via UAC.
+#   -UndoPopup  Restore    : re-enable NCSI active probing. Self-elevates.
 #   -Install    Register   : creates Scheduled Task (logon trigger)
 #   -Uninstall  Remove     : deletes the Scheduled Task
 #   -Status     Status     : prints saved config / task / online state
@@ -24,7 +30,11 @@ param(
     [switch]$Uninstall,
     [switch]$Status,
     [switch]$InstallElevated,
-    [string]$ResultFile = ''
+    [string]$ResultFile = '',
+    [string]$Ssid = '',
+    [switch]$FixPopup,
+    [switch]$UndoPopup,
+    [switch]$PopupElevated
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
@@ -470,6 +480,52 @@ function Test-IsAdmin {
         [System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# ---------------------------------------------------------------
+# Captive-portal popup fix. While unauthenticated, Windows NCSI active
+# probing sees the AC hijack and auto-opens the default browser (ends
+# up on MSN). Disabling active probing stops that popup; real Internet
+# access is unaffected (this app does the login itself).
+# ---------------------------------------------------------------
+$PopupPolKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator'
+$PopupNlaKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet'
+
+function Set-PopupFix([bool]$undo) {
+    if ($undo) {
+        Remove-ItemProperty -Path $PopupPolKey -Name NoActiveProbe -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $PopupNlaKey -Name EnableActiveProbing -Value 1 -Type DWord
+    } else {
+        if (-not (Test-Path $PopupPolKey)) { New-Item -Path $PopupPolKey -Force | Out-Null }
+        Set-ItemProperty -Path $PopupPolKey -Name NoActiveProbe -Value 1 -Type DWord
+        Set-ItemProperty -Path $PopupNlaKey -Name EnableActiveProbing -Value 0 -Type DWord
+    }
+    try { Restart-Service NlaSvc -Force } catch { }
+}
+
+function Test-PopupFixed {
+    try {
+        $pol = (Get-ItemProperty -Path $PopupPolKey -ErrorAction SilentlyContinue).NoActiveProbe
+        if ($pol -eq 1) { return $true }
+        $nla = (Get-ItemProperty -Path $PopupNlaKey -ErrorAction SilentlyContinue).EnableActiveProbing
+        if ($nla -eq 0) { return $true }
+    } catch { }
+    return $false
+}
+
+# Elevated child: apply/undo the fix, report via result file.
+function Invoke-PopupElevated {
+    try {
+        Set-PopupFix $UndoPopup.IsPresent
+        $ok = if ($UndoPopup) { -not (Test-PopupFixed) } else { Test-PopupFixed }
+        if ($ResultFile) {
+            Set-Content -Path $ResultFile -Value ($(if ($ok) { 'OK' } else { 'ERR:VERIFY_FAILED' })) -Encoding ASCII
+        }
+        exit $(if ($ok) { 0 } else { 1 })
+    } catch {
+        if ($ResultFile) { Set-Content -Path $ResultFile -Value ('ERR:' + $_.Exception.Message) -Encoding ASCII }
+        exit 1
+    }
+}
+
 # Actual task registration. The task itself always runs NON-elevated
 # (RunLevel Limited) as the current user at logon.
 function Register-TaskInternal {
@@ -534,6 +590,45 @@ if ($Install) {
     exit 1
 }
 
+# ---------------------------------------------------------------
+# -FixPopup / -UndoPopup : toggle NCSI active probing (admin needed,
+# self-elevates via UAC like -Install).
+# ---------------------------------------------------------------
+if ($PopupElevated) {
+    Invoke-PopupElevated
+}
+
+if ($FixPopup -or $UndoPopup) {
+    if (Test-IsAdmin) {
+        Set-PopupFix $UndoPopup.IsPresent
+        $ok = if ($UndoPopup) { -not (Test-PopupFixed) } else { Test-PopupFixed }
+        if ($ok) { Emit 'OK' 'POPUP_FIXED'; exit 0 }
+        Emit 'ERR' 'POPUP_FIX_FAILED'
+        exit 1
+    }
+    $resultFile = Join-Path $Dir 'popup_result.tmp'
+    Remove-Item $resultFile -ErrorAction SilentlyContinue
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $undoArg = ''
+    if ($UndoPopup) { $undoArg = ' -UndoPopup' }
+    $childArgs = '-NoProfile -ExecutionPolicy Bypass -Command "& ''{0}'' -PopupElevated{1} -ResultFile ''{2}''"' -f $Script, $undoArg, $resultFile
+    try {
+        $proc = Start-Process -FilePath $psExe -Verb RunAs -Wait -PassThru -ArgumentList $childArgs
+    } catch {
+        Emit 'ERR' 'POPUP_FIX_FAILED: ELEVATION_DENIED'
+        exit 1
+    }
+    Start-Sleep -Milliseconds 300
+    if ($proc.ExitCode -eq 0 -and (Test-Path $resultFile)) {
+        Emit 'OK' 'POPUP_FIXED'
+        exit 0
+    }
+    $detail = ''
+    if (Test-Path $resultFile) { $detail = (Get-Content $resultFile -Raw).Trim() }
+    Emit 'ERR' ('POPUP_FIX_FAILED: {0}' -f $(if ($detail) { $detail } else { 'ELEVATED_CHILD_FAILED' }))
+    exit 1
+}
+
 if ($Uninstall) {
     try {
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
@@ -562,6 +657,7 @@ if ($Status) {
 # ---------------------------------------------------------------
 if ($Once) {
     Load-Config
+    if ($Ssid) { $script:AutoLoginSsid = $Ssid }   # login for any saved profile
     if (-not (Select-AutoLoginProfile)) { exit 1 }
     $cur = Get-CurrentSsid
     if ($cur -ne $script:AutoLoginSsid) {
