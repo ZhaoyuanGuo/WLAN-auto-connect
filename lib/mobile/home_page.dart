@@ -1245,7 +1245,7 @@ class _MobileHomePageState extends State<MobileHomePage> {
           width: 420,
           child: SingleChildScrollView(
             child: Text(
-              '本软件为面向辽宁警察学院校园网（Dr.COM / 哆点认证）的免费辅助登录工具。\n\n'
+              '本软件为面向使用 Dr.COM / 哆点认证的校园网的免费辅助登录工具。\n\n'
                   '· 您的账号、密码仅保存在手机本应用私有数据中，不上传、不同步、不共享；\n'
                   '· 软件不含统计、埋点或云端同步，不收集您的任何个人数据；\n'
                   '· 仅向校园网认证服务器（172.16.200.11）发送认证必需的请求；\n'

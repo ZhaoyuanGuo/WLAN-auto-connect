@@ -171,7 +171,7 @@ function Migrate-Legacy($cfg) {
     $migrated = $false
     $ssid = ''
     if ($cfg -and $cfg.ssid) { $ssid = [string]$cfg.ssid }   # hijacked campus ssid
-    if (-not $ssid) { $ssid = 'LNPC-STU-5G' }
+    if (-not $ssid) { return }   # unknown SSID: cannot attribute legacy data
 
     if ((Test-Path $CredFile) -and -not (Test-Path $CredJson)) {
         $enc = ''

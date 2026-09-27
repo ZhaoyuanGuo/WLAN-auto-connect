@@ -227,7 +227,7 @@ class _MobileAgreementPageState extends State<MobileAgreementPage> {
                         ),
                         _section(
                           '二、软件功能与用途',
-                          '本软件是面向辽宁警察学院校园网（Dr.COM / 哆点认证）的免费辅助登录工具，'
+                          '本软件是面向使用 Dr.COM / 哆点认证的校园网的免费辅助登录工具，'
                               '用于在连接校园网 WiFi 后自动完成网页认证，'
                               '并提供桌面小组件一键认证、开机后自动认证等便捷功能。'
                               '本软件完全在本地运行，不包含任何广告、推广或收费内容，'

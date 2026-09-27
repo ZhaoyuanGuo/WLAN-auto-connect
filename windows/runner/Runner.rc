@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "cn.edu.lnpc" "\0"
+            VALUE "CompanyName", "ZhaoyuanGuo" "\0"
             VALUE "FileDescription", "wlan_auto_connect" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "wlan_auto_connect" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 cn.edu.lnpc. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ZhaoyuanGuo. All rights reserved." "\0"
             VALUE "OriginalFilename", "wlan_auto_connect.exe" "\0"
             VALUE "ProductName", "wlan_auto_connect" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
