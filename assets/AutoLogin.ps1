@@ -198,7 +198,7 @@ function Get-CurrentSsid {
     try {
         $out = (& netsh.exe wlan show interfaces 2>$null) -join "`n"
         # matches "    SSID : xxx" but not "BSSID" (which starts with B)
-        if ($out -match '(?m)^\s*SSID\s*:\s*(.+?)\s*$') { return $Matches[1] }
+        if ($out -match '(?m)^\s*SSID\s*:\s*(.+?)\s*$') { return $Matches[1].Trim() }
     } catch { }
     return ''
 }
@@ -206,6 +206,20 @@ function Get-CurrentSsid {
 function Connect-Wlan([string]$ssid) {
     if (-not $ssid) { return }
     try { & netsh.exe wlan connect name="$ssid" | Out-Null } catch { }
+}
+
+# True when the SSID is currently in the air (netsh wlan show networks).
+# Used to avoid sending a connect request for an out-of-range network:
+# that request tears down the current WiFi connection and flaps.
+function Test-WlanVisible([string]$ssid) {
+    if (-not $ssid) { return $false }
+    try {
+        $out = (& netsh.exe wlan show networks 2>$null) -join "`n"
+        foreach ($m in [regex]::Matches($out, '(?m)^\s*SSID\s+\d+\s*:\s*(.+?)\s*$')) {
+            if ($m.Groups[1].Value.Trim() -eq $ssid) { return $true }
+        }
+    } catch { }
+    return $false
 }
 
 # ---------------------------------------------------------------
@@ -669,8 +683,12 @@ if ($Once) {
 
 # ---------------------------------------------------------------
 # Boot mode (default, from Scheduled Task):
-# wait for the designated WiFi (try to connect if Windows has a saved
-# profile), then run login cycles with retries.
+# Log in silently once connected to the designated WiFi. NEVER hijack
+# the WLAN: while Windows is connected to (or associating with) some
+# other network, leave it alone and exit. Only send a connect request
+# when nothing is connected AND the target SSID is visible in the air
+# (a connect to an out-of-range network tears down the current WiFi
+# and flaps until Windows reconnects it).
 # ---------------------------------------------------------------
 Load-Config
 if (-not (Select-AutoLoginProfile)) { exit 1 }
@@ -681,8 +699,28 @@ $onTarget = $false
 while ((Get-Date) -lt $deadline) {
     $cur = Get-CurrentSsid
     if ($cur -eq $script:AutoLoginSsid) { $onTarget = $true; break }
-    Connect-Wlan $script:AutoLoginSsid   # no-op if no saved wlan profile
-    Start-Sleep -Seconds 4
+    if ($cur) {
+        # User is on some other WiFi on purpose: do not touch it.
+        Emit 'INFO' ('OTHER_WIFI_ACTIVE ssid={0} boot_login_skipped' -f $cur)
+        exit 0
+    }
+    if (Test-WlanVisible $script:AutoLoginSsid) {
+        Connect-Wlan $script:AutoLoginSsid
+        # Association takes seconds; re-issuing connect mid-association
+        # aborts it and causes flapping, so wait quietly first.
+        $assocEnd = (Get-Date).AddSeconds(20)
+        while (((Get-Date) -lt $assocEnd) -and ((Get-Date) -lt $deadline)) {
+            Start-Sleep -Seconds 2
+            $cur = Get-CurrentSsid
+            if ($cur) { break }
+        }
+        if ($cur -eq $script:AutoLoginSsid) { $onTarget = $true; break }
+        if ($cur) {
+            Emit 'INFO' ('OTHER_WIFI_ACTIVE ssid={0} boot_login_skipped' -f $cur)
+            exit 0
+        }
+    }
+    Start-Sleep -Seconds 3
 }
 if (-not $onTarget) {
     Emit 'ERR' ('WIFI_NOT_CONNECTED: {0}' -f $script:AutoLoginSsid)
