@@ -36,6 +36,8 @@ class WindowsApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        // Segoe UI 不含中文字形，不指定时中文走引擎回退链，渲染发虚且粗细不均
+        fontFamily: 'Microsoft YaHei UI',
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF3D5AFE),
           brightness: Brightness.light,
@@ -1104,6 +1106,10 @@ class _HomePageState extends State<HomePage> {
                                             _logs[i],
                                             style: const TextStyle(
                                               fontFamily: 'Consolas',
+                                              // Consolas 无中文，日志中文回退到雅黑
+                                              fontFamilyFallback: [
+                                                'Microsoft YaHei UI',
+                                              ],
                                               fontSize: 12,
                                               color: Color(0xFFD4D4D4),
                                             ),

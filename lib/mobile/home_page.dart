@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
 
 import '../services/portal_client.dart';
@@ -49,6 +50,9 @@ class _MobileHomePageState extends State<MobileHomePage> {
   bool _scanning = false;
   String _selectedSsid = '';
   String _currentSsid = '';
+
+  /// 联网检测守护状态（设置页卡片）。
+  PortalStatus? _portalStatus;
 
   final _logs = <String>[];
   final _logController = ScrollController();
@@ -106,6 +110,44 @@ class _MobileHomePageState extends State<MobileHomePage> {
       default:
         _log('自动关闭系统联网检测失败：$r');
     }
+    await _refreshPortalStatus();
+  }
+
+  /// 查询联网检测守护状态（设置页卡片渲染）。
+  Future<void> _refreshPortalStatus() async {
+    final s = await _wlan.portalStatus();
+    if (mounted) setState(() => _portalStatus = s);
+  }
+
+  /// 复制方案一的 adb 授权命令。
+  Future<void> _copyGrantCommand() async {
+    await Clipboard.setData(const ClipboardData(
+      text: 'adb shell pm grant cn.lnpc.wlan_auto_connect '
+          'android.permission.WRITE_SECURE_SETTINGS',
+    ));
+    _snack('命令已复制，请在电脑 adb 中执行');
+  }
+
+  /// 方案二：通过 Shizuku 关闭联网检测。
+  Future<void> _shizukuFix() async {
+    var r = await _wlan.shizukuEnsurePortalOff();
+    if (r == 'no_permission') {
+      // 触发 Shizuku 授权窗，等用户确认后重试一次
+      await _wlan.shizukuRequestPermission();
+      _snack('请在 Shizuku 授权窗中点击「允许」，然后重试');
+      return;
+    }
+    switch (r) {
+      case 'disabled' || 'already_off':
+        _log(r == 'already_off' ? '联网检测本就处于关闭状态。' : '已通过 Shizuku 关闭系统联网检测。');
+        _snack('已通过 Shizuku 关闭联网检测');
+      case 'not_running':
+        _snack('未检测到 Shizuku：请先安装 Shizuku 并启动（无线调试或连接电脑激活）',
+            error: true);
+      default:
+        _snack('Shizuku 执行失败：$r', error: true);
+    }
+    await _refreshPortalStatus();
   }
 
   /// 读取原生小组件上次运行状态并反映到界面状态。
@@ -663,26 +705,41 @@ class _MobileHomePageState extends State<MobileHomePage> {
                 Icon(Icons.widgets_outlined,
                     size: 20, color: Color(0xFF3D5AFE)),
                 SizedBox(width: 8),
-                Text('桌面小组件',
+                Text('桌面小组件 / 快捷按钮',
                     style:
                         TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              '把「一键连接」添加到手机主屏幕，无需打开应用即可完成校园网认证。',
+              '把「一键连接」添加到手机主屏幕或下拉控制中心，无需打开应用即可完成校园网认证。',
               style: TextStyle(
                   fontSize: 12.5, color: Colors.grey.shade600, height: 1.5),
             ),
             const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _pinWidget,
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.add_home_outlined, size: 18),
-              label: const Text('添加小组件到桌面'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _pinWidget,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.add_home_outlined, size: 18),
+                  label: const Text('添加小组件到桌面'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _addQsTile,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.toggle_on_outlined, size: 18),
+                  label: const Text('添加控制中心按钮'),
+                ),
+              ],
             ),
           ],
         ),
@@ -700,6 +757,17 @@ class _MobileHomePageState extends State<MobileHomePage> {
       if (supported == true) {
         await HomeWidget.requestPinWidget(name: 'CampusWidgetProvider');
       }
+    } catch (_) {}
+  }
+
+  Future<void> _addQsTile() async {
+    // Android 13+ 弹系统确认窗（选择功能块尺寸）；HyperOS 下可能静默失败，
+    // 与小组件一致：先给手动添加引导，再带超时尝试自动弹窗。
+    _snack('若未弹出确认窗：下拉控制中心 → 编辑 → 添加「校园网一键连接」');
+    try {
+      await _wlan
+          .requestAddTile()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
     } catch (_) {}
   }
 
@@ -975,6 +1043,147 @@ class _MobileHomePageState extends State<MobileHomePage> {
     );
   }
 
+  /// 设置页：联网检测守护卡片。
+  /// 方案一（推荐）：adb 授权 WRITE_SECURE_SETTINGS，一次授权重启不丢，
+  /// app 每次启动自动维持；方案二：Shizuku（shell 权限，免电脑）。
+  Widget _buildPortalGuardCard() {
+    final s = _portalStatus;
+    final off = s?.off ?? false;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.shield_outlined,
+                    size: 20, color: Color(0xFF2E7D32)),
+                const SizedBox(width: 8),
+                const Text('联网检测守护',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                IconButton(
+                  onPressed: _refreshPortalStatus,
+                  tooltip: '刷新状态',
+                  icon: const Icon(Icons.refresh, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '系统联网检测会在连接校园网后自动拉起浏览器；关闭后由本应用静默完成认证。',
+              style: TextStyle(
+                  fontSize: 12.5, color: Colors.grey.shade600, height: 1.5),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                    off
+                        ? Icons.check_circle
+                        : Icons.warning_amber_rounded,
+                    size: 16,
+                    color: off
+                        ? const Color(0xFF2E7D32)
+                        : const Color(0xFFEF6C00)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    off
+                        ? '已开启守护：系统检测处于关闭状态'
+                        : '未开启：连接校园网后可能自动跳浏览器',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: off
+                            ? const Color(0xFF2E7D32)
+                            : const Color(0xFFEF6C00)),
+                  ),
+                ),
+              ],
+            ),
+            if (!off) ...[
+              if (s?.writePerm ?? false) ...[
+                const SizedBox(height: 10),
+                FilledButton.tonal(
+                  onPressed: () async {
+                    final r = await _wlan.ensurePortalDetectionOff();
+                    _log(r == 'disabled' ? '已关闭系统联网检测。' : '关闭结果：$r');
+                    await _refreshPortalStatus();
+                  },
+                  child: const Text('一键关闭（已具备权限）'),
+                ),
+              ],
+              const SizedBox(height: 12),
+              const Text('方案一（推荐）：adb 一次授权，重启不丢',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(
+                '① 手机开启「USB 调试」并连接电脑\n'
+                '② 电脑安装 adb（Android 平台工具）\n'
+                '③ 执行以下命令（点按钮复制后粘贴执行）：',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    height: 1.5),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'adb shell pm grant cn.lnpc.wlan_auto_connect '
+                        'android.permission.WRITE_SECURE_SETTINGS',
+                        style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 10.5,
+                            color: Color(0xFFD4D4D4)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    onPressed: _copyGrantCommand,
+                    tooltip: '复制命令',
+                    icon: const Icon(Icons.copy, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text('方案二：Shizuku（免电脑，需 Shizuku 运行中）',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: _shizukuFix,
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.terminal, size: 18),
+                label: Text(s?.shizukuRunning ?? false
+                    ? '通过 Shizuku 关闭检测'
+                    : '通过 Shizuku 关闭检测（需先启动 Shizuku）'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   // ---------------- 页面 3：设置 ----------------
 
   Widget _buildSettingsPage() {
@@ -984,6 +1193,8 @@ class _MobileHomePageState extends State<MobileHomePage> {
         _buildWidgetTipsCard(),
         const SizedBox(height: 12),
         _buildAutoCard(),
+        const SizedBox(height: 12),
+        _buildPortalGuardCard(),
         const SizedBox(height: 12),
         Card(
           child: ListTile(

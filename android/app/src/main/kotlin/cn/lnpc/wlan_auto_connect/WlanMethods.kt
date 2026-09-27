@@ -1,15 +1,19 @@
 package cn.lnpc.wlan_auto_connect
 
 import android.Manifest
+import android.app.StatusBarManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSuggestion
 import android.os.Build
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -19,6 +23,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import rikka.shizuku.Shizuku
 
 /// 提供给 Flutter 的 Android WLAN 能力：
 /// - scan：扫描可见 WiFi（需定位权限；fresh=true 时等待一次系统刷新）
@@ -62,6 +67,24 @@ object WlanMethods {
             }
             "ensurePortalDetectionOff" -> {
                 result.success(ensurePortalDetectionOff(context.applicationContext))
+            }
+            "portalStatus" -> {
+                result.success(portalStatus(context.applicationContext))
+            }
+            "shizukuEnsurePortalOff" -> {
+                val appContext = context.applicationContext
+                // 必须后台执行：bindUserService 的回调派发到主线程队列，
+                // 若在主线程 latch.await 会死锁 15s 导致 ANR
+                thread {
+                    val r = shizukuEnsurePortalOff(appContext)
+                    Handler(Looper.getMainLooper()).post { result.success(r) }
+                }
+            }
+            "shizukuRequestPermission" -> {
+                result.success(shizukuRequestPermission())
+            }
+            "requestAddTile" -> {
+                result.success(requestAddTile(context))
             }
             else -> result.notImplemented()
         }
@@ -239,6 +262,124 @@ object WlanMethods {
             "no_permission"
         } catch (e: Exception) {
             "error:${e.message}"
+        }
+    }
+
+    /// 联网检测当前状态 + 两条修复方案的可用性，供设置页卡片渲染。
+    fun portalStatus(context: Context): Map<String, Any> {
+        val cr = context.contentResolver
+        val detection = Settings.Global.getInt(cr, "captive_portal_detection_enabled", 1)
+        val mode = Settings.Global.getInt(cr, "captive_portal_mode", 1)
+        val writePerm = ContextCompat.checkSelfPermission(
+            context, "android.permission.WRITE_SECURE_SETTINGS"
+        ) == PackageManager.PERMISSION_GRANTED
+        val shizukuRunning = try {
+            Shizuku.pingBinder()
+        } catch (_: Throwable) {
+            false
+        }
+        val shizukuPerm = try {
+            shizukuRunning &&
+                    Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        } catch (_: Throwable) {
+            false
+        }
+        return mapOf(
+            "off" to (detection == 0 && mode == 0),
+            "writePerm" to writePerm,
+            "shizukuRunning" to shizukuRunning,
+            "shizukuPerm" to shizukuPerm,
+        )
+    }
+
+    /// 方案二：通过 Shizuku（shell 权限）执行 settings put 关闭联网检测。
+    /// 实现：bindUserService 把 ShellService 拉起到 Shizuku 服务进程（shell uid）中执行命令。
+    /// 返回：already_off / disabled / not_running / no_permission / error:<msg>
+    private fun shizukuEnsurePortalOff(context: Context): String {
+        val running = try {
+            Shizuku.pingBinder()
+        } catch (_: Throwable) {
+            false
+        }
+        if (!running) return "not_running"
+        val perm = try {
+            Shizuku.checkSelfPermission()
+        } catch (_: Throwable) {
+            -1
+        }
+        if (perm != PackageManager.PERMISSION_GRANTED) return "no_permission"
+        return try {
+            val latch = CountDownLatch(1)
+            var result = "error:timeout"
+            val args = Shizuku.UserServiceArgs(ComponentName(context, ShellService::class.java))
+                .processNameSuffix("shell_service")
+                .version(1)
+            val connection = object : ServiceConnection {
+                override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                    try {
+                        val svc = IShellService.Stub.asInterface(binder)
+                        if (svc == null) {
+                            result = "error:binder_null"
+                        } else {
+                            val exit = svc.exec(
+                                arrayOf(
+                                    "sh", "-c",
+                                    "settings put global captive_portal_detection_enabled 0; " +
+                                            "settings put global captive_portal_mode 0"
+                                )
+                            )
+                            result = if (exit == 0) "disabled" else "error:exit=$exit"
+                        }
+                    } catch (e: Throwable) {
+                        result = "error:${e.message}"
+                    } finally {
+                        latch.countDown()
+                    }
+                }
+
+                override fun onServiceDisconnected(name: ComponentName?) {}
+            }
+            Shizuku.bindUserService(args, connection)
+            latch.await(10, TimeUnit.SECONDS)
+            try {
+                Shizuku.unbindUserService(args, connection, true)
+            } catch (_: Throwable) {
+            }
+            result
+        } catch (e: Throwable) {
+            "error:${e.message}"
+        }
+    }
+
+    /// 请求 Shizuku 授权（系统弹出 Shizuku 管理器授权窗），结果异步生效，
+    /// Dart 侧稍后重查 portalStatus 即可。
+    private fun shizukuRequestPermission(): Boolean {
+        return try {
+            Shizuku.requestPermission(7777)
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /// Android 13+：弹出系统「将功能块添加到快捷设置」确认窗（磁贴添加入口）。
+    /// 返回 false 表示系统不支持（由应用引导手动添加）。
+    private fun requestAddTile(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val activity = context as? android.app.Activity ?: return false
+        return try {
+            val sbm = activity.getSystemService(StatusBarManager::class.java) ?: return false
+            sbm.requestAddTileService(
+                ComponentName(activity, CampusTileService::class.java),
+                "校园网一键连接",
+                android.graphics.drawable.Icon.createWithResource(
+                    activity, R.drawable.ic_tile_campus
+                ),
+                ContextCompat.getMainExecutor(activity),
+            ) { }
+            true
+        } catch (_: Throwable) {
+            false
         }
     }
 }

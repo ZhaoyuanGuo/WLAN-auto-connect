@@ -87,7 +87,9 @@ object CampusLogin {
             )
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(STATUS_KEY, status.toString()).apply()
+        CampusTileService.clearOptimistic()
         CampusWidgetProvider.pushUpdate(context)
+        CampusTileService.pushUpdate(context)
     }
 
     /// 执行一次完整的静默认证流程，返回最终文案。
@@ -288,6 +290,7 @@ object CampusLogin {
             Triple(code, String(bytes, Charsets.UTF_8),
                 c.getHeaderField("Location") ?: "")
         } catch (e: Exception) {
+            android.util.Log.d("CampusLogin", "httpGet fail ($url): $e")
             Triple(null, "", "")
         } finally {
             conn?.disconnect()

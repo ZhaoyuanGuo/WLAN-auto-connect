@@ -89,4 +89,71 @@ class AndroidWlan {
       return 'error:${e.message ?? e.code}';
     }
   }
+
+  /// 联网检测状态 + 两条修复方案的可用性。
+  Future<PortalStatus?> portalStatus() async {
+    try {
+      final m = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('portalStatus');
+      if (m == null) return null;
+      return PortalStatus(
+        off: (m['off'] as bool?) ?? false,
+        writePerm: (m['writePerm'] as bool?) ?? false,
+        shizukuRunning: (m['shizukuRunning'] as bool?) ?? false,
+        shizukuPerm: (m['shizukuPerm'] as bool?) ?? false,
+      );
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  /// 方案二：通过 Shizuku 关闭联网检测。返回 already_off / disabled /
+  /// not_running / no_permission / error:信息。
+  Future<String> shizukuEnsurePortalOff() async {
+    try {
+      return await _channel
+              .invokeMethod<String>('shizukuEnsurePortalOff') ??
+          'error:no_result';
+    } on PlatformException catch (e) {
+      return 'error:${e.message ?? e.code}';
+    }
+  }
+
+  /// 请求 Shizuku 授权（弹出 Shizuku 管理器确认窗）。
+  Future<void> shizukuRequestPermission() async {
+    try {
+      await _channel.invokeMethod('shizukuRequestPermission');
+    } on PlatformException {
+      // 忽略：稍后由 portalStatus 反映真实状态
+    }
+  }
+
+  /// 弹出系统「添加到快捷设置」确认窗（Android 13+）。返回 false 表示
+  /// 系统不支持，由应用引导手动添加。
+  Future<bool> requestAddTile() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestAddTile') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+}
+
+/// 联网检测守护状态快照。
+class PortalStatus {
+  const PortalStatus({
+    required this.off,
+    required this.writePerm,
+    required this.shizukuRunning,
+    required this.shizukuPerm,
+  });
+
+  /// 两项检测设置是否均为关闭。
+  final bool off;
+  /// 是否持有 WRITE_SECURE_SETTINGS（方案一可用）。
+  final bool writePerm;
+  /// Shizuku 是否在运行。
+  final bool shizukuRunning;
+  /// 本应用是否已获 Shizuku 授权。
+  final bool shizukuPerm;
 }

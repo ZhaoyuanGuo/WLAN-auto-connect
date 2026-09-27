@@ -19,6 +19,7 @@
         android:label="校园网自动登录"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
@@ -67,6 +68,35 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+        <!-- 控制中心（快捷设置）一键连接磁贴 -->
+        <service
+            android:name=".CampusTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_campus"
+            android:label="校园网一键连接"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <!-- 磁贴长按偏好页：SystemUI 优先跳转此 Activity（无则退回系统应用信息页） -->
+        <activity
+            android:name=".TilePreferencesActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+        </activity>
+        <!-- 方案二：Shizuku（shell 权限执行 settings put，需用户在 Shizuku 中授权） -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -82,6 +112,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- 检测 Shizuku 是否安装（Android 11+ 包可见性） -->
+        <package android:name="moe.shizuku.privileged.api" />
+        <intent>
+            <action android:name="android.service.quicksettings.action.QS_TILE" />
         </intent>
     </queries>
 </manifest>

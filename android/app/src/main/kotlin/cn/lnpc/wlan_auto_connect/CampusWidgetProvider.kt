@@ -126,10 +126,23 @@ class LoginWorker(
     params: androidx.work.WorkerParameters,
 ) : androidx.work.CoroutineWorker(context, params) {
     override suspend fun doWork(): androidx.work.ListenableWorker.Result {
-        try {
+        val r = try {
             CampusLogin.run(applicationContext)
         } catch (_: Exception) {
-            CampusLogin.setStatus(applicationContext, false, "任务异常")
+            "TASK_ERROR"
+        }
+        // 失败时弹 Toast 给可见反馈（成功由磁贴变色/小组件文案表达）
+        val msg = when {
+            r == "LOGIN_OK" || r == "ONLINE_ALREADY" -> null
+            r.startsWith("LOGIN_FAIL:") -> "登录失败：${r.removePrefix("LOGIN_FAIL:")}"
+            r == "NO_CONFIG" || r == "NO_PROFILE" -> "未配置账号，请先在 App 中保存账号密码"
+            r == "PORTAL_UNREACHABLE" -> "未连接校园网：门户不可达（请确认已连校园网 WiFi）"
+            r == "BAD_RESPONSE" -> "认证服务器响应异常"
+            r == "UNCONFIRMED" -> "已提交认证但未确认上线，请稍后查看"
+            else -> "校园网认证任务异常"
+        }
+        if (msg != null) {
+            android.widget.Toast.makeText(applicationContext, msg, android.widget.Toast.LENGTH_LONG).show()
         }
         return androidx.work.ListenableWorker.Result.success()
     }

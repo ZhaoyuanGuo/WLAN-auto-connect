@@ -10,6 +10,11 @@ android {
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
+    // Shizuku UserService 需要 AIDL 编译（AGP 8 默认关闭）
+    buildFeatures {
+        aidl = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -49,4 +54,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     // 小组件「一键连接」后台任务（CoroutineWorker）
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // 方案二：通过 Shizuku 以 shell 权限关闭系统联网检测
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }
