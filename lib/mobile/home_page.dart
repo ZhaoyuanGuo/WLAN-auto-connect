@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
 
+import '../cloud/cloud_page.dart';
 import '../services/portal_client.dart';
 import 'android_wlan.dart';
 import 'config_store.dart';
@@ -1196,6 +1197,8 @@ class _MobileHomePageState extends State<MobileHomePage> {
         const SizedBox(height: 12),
         _buildPortalGuardCard(),
         const SizedBox(height: 12),
+        const CloudCard(),
+        const SizedBox(height: 12),
         Card(
           child: ListTile(
             leading: const Icon(Icons.description_outlined,
@@ -1246,8 +1249,9 @@ class _MobileHomePageState extends State<MobileHomePage> {
           child: SingleChildScrollView(
             child: Text(
               '本软件为面向使用 Dr.COM / 哆点认证的校园网的免费辅助登录工具。\n\n'
-                  '· 您的账号、密码仅保存在手机本应用私有数据中，不上传、不同步、不共享；\n'
-                  '· 软件不含统计、埋点或云端同步，不收集您的任何个人数据；\n'
+                  '· 您的账号、密码默认仅保存在手机本应用私有数据中，不共享；\n'
+                  '· 仅当您主动登录并使用"云端同步"时，配置才加密上传到开发者自建服务器用于多设备备份，可随时删除；\n'
+                  '· 软件不含统计、埋点或行为上报，不收集您的使用数据；\n'
                   '· 仅向校园网认证服务器（172.16.200.11）发送认证必需的请求；\n'
                   '· 扫描 WiFi 需要系统"位置信息"权限（Android 限制），软件不获取位置轨迹；\n'
                   '· 请勿将本软件用于登录他人账号或违反学校网络管理规定的行为。\n\n'

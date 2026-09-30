@@ -26,6 +26,7 @@
 param(
     [switch]$Once,
     [switch]$Save,
+    [switch]$Export,
     [switch]$Install,
     [switch]$Uninstall,
     [switch]$Status,
@@ -486,6 +487,19 @@ if ($Save) {
         Emit 'ERR' ('SAVE_FAILED: {0}' -f $_.Exception.Message)
         exit 1
     }
+}
+
+# Export saved passwords (DPAPI, current user scope) as JSON {ssid: plain}.
+# Used by the app's cloud sync to back up profiles across devices.
+if ($Export) {
+    Load-Config
+    $map = @{}
+    foreach ($ssid in $script:Profiles.Keys) {
+        $pw = Get-SavedPassword ([string]$ssid)
+        if ($pw) { $map[[string]$ssid] = $pw }
+    }
+    Emit 'OK' ($map | ConvertTo-Json -Compress)
+    exit 0
 }
 
 function Test-IsAdmin {

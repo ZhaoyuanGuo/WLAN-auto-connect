@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'cloud/cloud_page.dart';
 import 'services/auto_login_service.dart';
 import 'services/debug_log.dart';
 import 'services/portal_client.dart';
@@ -254,12 +255,16 @@ class _AgreementPageState extends State<AgreementPage> {
                         '三、数据与隐私保护',
                         '本软件高度重视您的个人信息保护：\n'
                             '1. 本地存储：您填写的校园网账号、密码及各 WiFi 配置，'
-                            '仅保存在本机 %APPDATA%\\CampusNetAutoLogin\\ 目录中，不上传、不同步、不共享；\n'
+                            '仅保存在本机 %APPDATA%\\CampusNetAutoLogin\\ 目录中，不共享；\n'
                             '2. 加密保护：密码经 Windows DPAPI（数据保护接口）加密，'
                             '仅当前 Windows 账户可解密；\n'
-                            '3. 不收集数据：本软件不含统计、埋点、上报或云端同步功能，'
-                            '不收集您的任何浏览记录、个人身份信息或使用行为数据；\n'
-                            '4. 本地探测：软件通过 Windows 系统命令（netsh）在本机扫描可见 WiFi'
+                            '3. 可选云同步：默认不同步任何数据。仅当您主动登录并使用'
+                            '"云端同步"功能时，软件才将 WiFi 配置（含密码）上传至开发者'
+                            '自建服务器做加密备份（传输与落盘均加密），用于多设备恢复，'
+                            '您可随时删除云端备份或退出登录；\n'
+                            '4. 不收集数据：本软件不含统计、埋点或行为上报，'
+                            '不收集您的任何浏览记录或使用行为数据；\n'
+                            '5. 本地探测：软件通过 Windows 系统命令（netsh）在本机扫描可见 WiFi'
                             '及读取当前连接状态，该信息仅用于界面展示，不会发送到任何外部服务器。',
                       ),
                       _section(
@@ -1055,6 +1060,8 @@ class _HomePageState extends State<HomePage> {
                           _buildLoginCard(selectedProfile),
                           const SizedBox(height: 12),
                           _buildAutoStartCard(),
+                          const SizedBox(height: 12),
+                          const CloudCard(),
                         ],
                       ),
                     ),

@@ -157,6 +157,24 @@ class AutoLoginService {
     return (false, err.isEmpty ? 'SAVE_FAILED' : err.last);
   }
 
+  /// 导出全部已存密码（ssid -> 明文）。密码由 PS 侧 DPAPI（当前用户）解密，
+  /// 仅用于云同步备份。PS 无已存密码时返回空表。
+  Future<Map<String, String>> exportPasswords() async {
+    final r = await _runPs(['-Export'], timeout: const Duration(seconds: 30));
+    final text = r.$2.trim();
+    for (final line in text.split('\n')) {
+      final t = line.trim();
+      if (!t.startsWith('[OK] ')) continue;
+      try {
+        final obj = jsonDecode(t.substring(5)) as Map<String, dynamic>;
+        return obj.map((k, v) => MapEntry(k, (v ?? '') as String));
+      } catch (_) {
+        return <String, String>{};
+      }
+    }
+    return <String, String>{};
+  }
+
   /// 注册开机自启任务计划（当前用户登录时触发）。
   /// 非管理员时会弹出 UAC 提权确认窗口（任务本身仍以普通权限运行）。
   Future<(bool, String)> installTask() async {

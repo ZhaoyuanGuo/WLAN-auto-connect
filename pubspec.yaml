@@ -35,6 +35,8 @@ dependencies:
   window_manager: ^0.4.3
   gbk_codec: ^0.4.0
   home_widget: ^0.10.0
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.4
 dev_dependencies:
   flutter_test:
     sdk: flutter
