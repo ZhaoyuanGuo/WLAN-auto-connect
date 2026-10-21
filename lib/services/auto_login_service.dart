@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'debug_log.dart';
+import 'portal_config.dart';
 
 /// 一个 WiFi（SSID）对应的登录档案：账号、运营商后缀。
 /// 密码经 DPAPI 加密存在脚本侧 cred.json 中，Dart 端不持有明文；
@@ -132,8 +133,8 @@ class AutoLoginService {
     required List<WifiProfile> profiles,
     required Map<String, String> passwords,
     required String autoLoginSsid,
-    String host = '172.16.200.11',
-    int eport = 801,
+    String host = PortalConfig.defaultHost,
+    int eport = PortalConfig.defaultEport,
   }) async {
     final payload = jsonEncode({
       'host': host,

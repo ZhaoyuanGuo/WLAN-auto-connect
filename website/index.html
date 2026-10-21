@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="辽宁警察学院（LNPC）校园网自动登录 —— 专为 LNPC-STU 校园网（Dr.COM / 哆点 eportal v4 认证）打造的跨平台静默登录工具，支持 Windows、Android 与 iPhone / iPad 快捷指令。">
+  <title>辽宁警察学院校园网自动登录 - 官方网站</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Android 版本选择弹窗 */
+    .btn-download.is-btn { border: none; cursor: pointer; font-family: inherit; }
+    .dlg-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .dlg-overlay.open { display: flex; animation: dlgFade .18s ease; }
+    @keyframes dlgFade { from { opacity: 0; } to { opacity: 1; } }
+    .dlg { background: var(--surface); border-radius: var(--radius-xl); max-width: 420px; width: 100%; padding: 22px 22px 18px; box-shadow: 0 20px 60px rgba(0,0,0,.28); animation: dlgUp .2s ease; }
+    @keyframes dlgUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .dlg-head h4 { font-size: 18px; margin-bottom: 4px; }
+    .dlg-head p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+    .dlg-close { background: none; border: none; font-size: 26px; line-height: 1; color: var(--text-muted); cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+    .dlg-close:hover { color: var(--text); }
+    .dlg-opts { margin-top: 16px; }
+    .dlg-opt { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; text-decoration: none; color: var(--text); transition: border-color .15s, background .15s; }
+    .dlg-opt:hover { border-color: var(--primary); background: var(--primary-light); }
+    .dlg-opt .ico { width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+    .dlg-opt .txt { flex: 1; min-width: 0; }
+    .dlg-opt .txt b { display: block; font-size: 15px; margin-bottom: 2px; }
+    .dlg-opt .txt span { font-size: 12px; color: var(--text-muted); }
+    .dlg-opt .tag { font-size: 11px; font-weight: 600; color: var(--primary); background: var(--primary-lighter); padding: 2px 8px; border-radius: 20px; flex-shrink: 0; }
+    .dlg-foot { margin-top: 6px; font-size: 11px; color: var(--text-muted); text-align: center; }
+
+    /* 顶部导航右侧按钮组 + 使用教程入口 */
+    .landing-nav-right { display: flex; align-items: center; gap: 10px; }
+    .btn-nav-help {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 14px; font-weight: 500; color: var(--text-secondary);
+      padding: 8px 18px; border-radius: var(--radius-full);
+      border: 1.5px solid var(--border); transition: all 0.2s;
+    }
+    .btn-nav-help:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+
+    /* 下载区「使用教程」引导横幅 */
+    .help-banner {
+      max-width: 1100px; margin: 18px auto 0;
+      display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+      padding: 16px 20px; background: var(--primary-light);
+      border: 1px solid var(--primary-lighter); border-radius: var(--radius-lg);
+      font-size: 14px; color: var(--text-secondary);
+    }
+    .help-banner .hb-text { font-weight: 500; }
+    .help-banner .hb-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      color: #fff; background: var(--primary); padding: 9px 20px;
+      border-radius: var(--radius); font-size: 14px; font-weight: 500; transition: background 0.2s;
+    }
+    .help-banner .hb-btn:hover { background: var(--primary-dark); }
+  </style>
+</head>
+<body>
+
+<!-- ==================== 顶部导航 ==================== -->
+<nav class="landing-nav">
+  <div class="landing-nav-left">
+    <svg width="28" height="28" viewBox="0 0 96 96" fill="none">
+      <rect width="96" height="96" rx="22" fill="#3B82F6"/>
+      <g stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" fill="none">
+        <path d="M33.9 45.9 A20 20 0 0 1 62.1 45.9"/>
+        <path d="M25.4 37.4 A32 32 0 0 1 70.6 37.4"/>
+      </g>
+      <path d="M48 52 L61 60 L48 68 L35 60 Z" fill="#FFFFFF"/>
+      <path d="M61.5 62 V70" stroke="#FFD34D" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <circle cx="61.5" cy="72.5" r="2.6" fill="#FFD34D"/>
+    </svg>
+    <span>校园网自动登录</span>
+  </div>
+  <div class="landing-nav-right">
+    <a class="btn-nav-help" href="help.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      使用教程
+    </a>
+    <a class="btn-nav-github" href="https://github.com/ZhaoyuanGuo/WLAN-auto-connect" target="_blank" rel="noopener">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ==================== Hero 区域 ==================== -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">辽宁警察学院 · LNPC-STU 校园网专用</div>
+    <h1>辽警校园网自动登录</h1>
+    <p class="hero-tagline">连接 LNPC-STU · 自动认证 · 静默无感</p>
+    <p class="hero-desc">专为<strong>辽宁警察学院</strong>校园网（WiFi 名 <strong>LNPC-STU</strong>，采用 Dr.COM / 哆点 eportal v4 认证）打造。连上校园网后自动完成网页认证，支持开机自启、桌面小组件与控制中心磁贴，Windows、Android、iPhone / iPad 全平台覆盖，全程无需手动打开认证网页。</p>
+    <div class="hero-buttons">
+      <a href="#download-section" class="btn-hero-primary" id="heroDl">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="hero-dl-label">下载应用</span>
+      </a>
+      <a href="share.html" class="btn-hero-secondary" id="heroIosBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        iPhone / iPad 快捷指令
+      </a>
+      <a href="https://github.com/ZhaoyuanGuo/WLAN-auto-connect" target="_blank" rel="noopener" class="btn-hero-secondary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
+        查看源码
+      </a>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="hero-mockup">
+      <div class="mockup-screen">
+        <div class="mockup-bar">
+          <span class="mockup-dot" style="background:#EF4444"></span>
+          <span class="mockup-dot" style="background:#F59E0B"></span>
+          <span class="mockup-dot" style="background:#10B981"></span>
+        </div>
+        <div class="mockup-body">
+          <div class="mockup-card">
+            <div class="mockup-avatar">校</div>
+            <div class="mockup-info">
+              <div class="mockup-line w60"></div>
+              <div class="mockup-line w40"></div>
+            </div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-avatar" style="background:#D1FAE5;color:#065F46">连</div>
+            <div class="mockup-info">
+              <div class="mockup-line w50"></div>
+              <div class="mockup-line w30"></div>
+            </div>
+          </div>
+          <div class="mockup-card">
+            <div class="mockup-avatar" style="background:#FEF3C7;color:#92400E">认</div>
+            <div class="mockup-info">
+              <div class="mockup-line w70"></div>
+              <div class="mockup-line w35"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 功能特性 ==================== -->
+<section class="features">
+  <h2 class="section-title">核心功能</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#EFF6FF;color:#3B82F6">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      </div>
+      <h3>静默自动认证</h3>
+      <p>连接校园网 WiFi 后自动抓取门户会话参数，调用 eportal 接口完成认证，无需打开认证网页</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#ECFDF5;color:#059669">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      <h3>一键连接</h3>
+      <p>自动连接目标 WiFi 并等待关联完成后发起认证，一条命令完成从联网到认证的全流程</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#F3E8FF;color:#7C3AED">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+      </div>
+      <h3>开机自启认证</h3>
+      <p>Windows 通过任务计划、Android 通过 WorkManager + 开机广播，登录系统后静默完成认证</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#DBEAFE;color:#1E40AF">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      </div>
+      <h3>桌面小组件 / 磁贴</h3>
+      <p>桌面小组件与控制中心磁贴实时显示连接状态，一键触发认证，无需打开应用</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#FEF3C7;color:#92400E">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h3>密码本地加密</h3>
+      <p>Windows 使用 DPAPI 加密，Android 保存于应用沙箱，仅本机可解密，不共享不上传</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:#FEF2F2;color:#DC2626">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <h3>联网检测守护</h3>
+      <p>可选关闭系统强制门户探测，避免认证前被系统抢占式弹出浏览器，认证全程静默</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 下载区域 ==================== -->
+<section id="download-section" class="download-section">
+  <h2 class="section-title">下载应用</h2>
+  <div class="download-platforms">
+    <!-- Windows -->
+    <div class="download-card">
+      <div class="platform-header">
+        <div class="platform-icon windows-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.45H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.45L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+        </div>
+        <div>
+          <h3>Windows</h3>
+          <span class="platform-version">v1.1.0</span>
+        </div>
+      </div>
+      <ul class="download-features">
+        <li>免管理员一键安装 · 支持 Win10/11</li>
+        <li>WiFi 扫描与多 WiFi 独立档案</li>
+        <li>开机自启静默认证（任务计划）</li>
+        <li>密码 DPAPI 加密，仅当前用户可解密</li>
+        <li>可选屏蔽系统强制门户探测</li>
+      </ul>
+      <a href="https://wlan.suspect.top/dl/wlan-auto-connect-v1.1.0-setup.exe" class="btn-download">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        获取 Windows 版
+      </a>
+      <p style="margin-top:10px;font-size:12px;color:var(--text-muted)">已在 Windows 11 26H2 测试可用</p>
+    </div>
+
+    <!-- Android -->
+    <div class="download-card">
+      <div class="platform-header">
+        <div class="platform-icon android-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 16V9a7 7 0 0 1 14 0v7"/><path d="M5 16h14v3a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3z"/><line x1="2" y1="11" x2="2" y2="16"/><line x1="22" y1="11" x2="22" y2="16"/><line x1="8" y1="5" x2="6" y2="3"/><line x1="16" y1="5" x2="18" y2="3"/></svg>
+        </div>
+        <div>
+          <h3>Android</h3>
+          <span class="platform-version">v1.2.1</span>
+        </div>
+      </div>
+      <ul class="download-features">
+        <li>一键连接 + 静默认证</li>
+        <li>桌面小组件实时状态与一键认证</li>
+        <li>控制中心磁贴，长按可跳转应用</li>
+        <li>联网检测守护（root / Shizuku 免弹窗）</li>
+        <li>全新界面，支持深色模式</li>
+      </ul>
+      <button type="button" class="btn-download is-btn" onclick="openAndroidDlg()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        获取 Android 版
+      </button>
+      <p style="margin-top:10px;font-size:12px;color:var(--text-muted)">已在 Android 17 设备上测试可用</p>
+    </div>
+
+    <!-- iOS 快捷指令 -->
+    <div class="download-card">
+      <div class="platform-header">
+        <div class="platform-icon ios-icon" style="background:#F3E8FF;color:#7C3AED">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+        </div>
+        <div>
+          <h3>iPhone / iPad</h3>
+          <span class="platform-version">快捷指令 · 无需安装 App</span>
+        </div>
+      </div>
+      <ul class="download-features">
+        <li>导入一次，首次输入账号密码只存本机</li>
+        <li>以后连校园网自动登录 · 免复制免密码</li>
+        <li>可设自动化：连上校园 WiFi 自动运行</li>
+        <li>无需越狱、无需描述文件、不上传服务器</li>
+        <li>已适配本校 LNPC-STU 校园网</li>
+      </ul>
+      <a href="share.html" class="btn-download">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        获取 iPhone / iPad 快捷指令
+      </a>
+      <p style="margin-top:10px;font-size:12px;color:var(--text-muted)">已在 iPadOS 26 上测试可用</p>
+    </div>
+  </div>
+
+  <!-- 使用教程引导横幅 -->
+  <div class="help-banner">
+    <span class="hb-text">第一次用？跟着逐步真实截图，3 分钟搞定从安装到开机自动认证。</span>
+    <a class="hb-btn" href="help.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      查看图文教程
+    </a>
+  </div>
+
+  <!-- Shizuku 下载兜底说明（联网检测守护辅助工具） -->
+  <div style="max-width:1100px;margin:18px auto 0;padding:14px 18px;background:#F8FAFC;border-radius:12px;font-size:13px;color:var(--text-muted,#64748B);line-height:1.8">
+    <strong>Android「联网检测守护」辅助工具 Shizuku 下载：</strong>
+    应用内关闭系统联网检测可选 Shizuku 方案（也可用 adb 授权或 root）。
+    若从 <a href="https://github.com/RikkaApps/Shizuku/releases" target="_blank" rel="noopener noreferrer">GitHub 官方 Releases</a> 下载过慢或失败，请使用本站高速直链兜底：
+    <a href="https://dl.suspect.top/wlan/shizuku/shizuku-v13.5.4.apk">shizuku-v13.5.4.apk（约 3.3 MB）</a>。<br>
+    推荐固定使用 v13.5.4：联发科/高通机型均可用；最新版 13.6.0 在部分联发科机型上无法启动服务。
+    校验值 SHA-256：<code style="font-size:11px;word-break:break-all">A05832CE3716AFB1FCCCF46F348006D2A296CA777E1FF3D223797DC74D06B31F</code>
+  </div>
+</section>
+
+<!-- ==================== 隐私说明 ==================== -->
+<section class="privacy">
+  <h2 class="section-title">隐私与安全</h2>
+  <div class="privacy-grid">
+    <div class="privacy-card">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        数据仅本地保存
+      </h3>
+      <p>账号、密码及各 WiFi 配置默认仅保存在本机（Windows 为 DPAPI 加密文件，Android 为应用沙箱），不共享、不收集。</p>
+    </div>
+    <div class="privacy-card">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+        可选云端同步
+      </h3>
+      <p>默认关闭。仅当您主动注册登录后，才将 WiFi 配置加密上传到自建服务器做备份，用于多设备恢复，可随时删除。</p>
+    </div>
+    <div class="privacy-card">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        无统计无埋点
+      </h3>
+      <p>软件不含统计、埋点或行为上报，除校园网认证服务器与可选同步服务器外，不连接任何其他外部服务器。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 页脚 ==================== -->
+<footer class="landing-footer">
+  <p>辽宁警察学院校园网自动登录 · LNPC-STU 静默认证辅助工具</p>
+  <p class="footer-sub">本工具仅供学习交流与个人校园网自动认证使用，请遵守所在学校/单位的网络管理规定</p>
+  <p class="footer-icp" style="font-size:12px;color:var(--text-muted,#8a8a8a);margin-top:6px"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">辽ICP备2026022980号</a><span style="margin:0 6px">|</span><a href="https://beian.mps.gov.cn/#/query/webSearch?code=21020302000662" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none"><img src="/ga_beian.png" alt="公安备案" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px">辽公网安备21020302000662号</a></p>
+</footer>
+
+<!-- ==================== Android 版本选择弹窗 ==================== -->
+<div class="dlg-overlay" id="androidDlg" onclick="if(event.target===this)closeAndroidDlg()">
+  <div class="dlg" role="dialog" aria-modal="true" aria-label="选择 Android 版本">
+    <div class="dlg-head">
+      <div>
+        <h4>选择 Android 版本</h4>
+        <p>不确定就选「64 位」，近几年的安卓手机基本都是。</p>
+      </div>
+      <button type="button" class="dlg-close" onclick="closeAndroidDlg()" aria-label="关闭">&times;</button>
+    </div>
+    <div class="dlg-opts">
+      <a class="dlg-opt" href="https://wlan.suspect.top/dl/wlan-auto-connect-v1.2.1-arm64-v8a.apk">
+        <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+        <span class="txt"><b>64 位（arm64-v8a）</b><span>推荐 · 近几年的安卓手机</span></span>
+        <span class="tag">推荐</span>
+      </a>
+      <a class="dlg-opt" href="https://wlan.suspect.top/dl/wlan-auto-connect-v1.2.1-armeabi-v7a.apk">
+        <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+        <span class="txt"><b>32 位（armeabi-v7a）</b><span>较旧的机型 / 低端机</span></span>
+      </a>
+      <a class="dlg-opt" href="https://wlan.suspect.top/dl/wlan-auto-connect-v1.2.1.apk">
+        <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+        <span class="txt"><b>Android x64（全架构通用包）</b><span>含 x86_64 / 模拟器</span></span>
+      </a>
+    </div>
+    <p class="dlg-foot">版本 v1.2.1 · 下载后若提示「未知来源」，允许安装即可</p>
+  </div>
+</div>
+
+<script>
+  function openAndroidDlg() { document.getElementById('androidDlg').classList.add('open'); document.body.style.overflow = 'hidden'; }
+  function closeAndroidDlg() { document.getElementById('androidDlg').classList.remove('open'); document.body.style.overflow = ''; }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAndroidDlg(); });
+
+  // 根据浏览器 UA，把 Hero 主按钮变成“当前设备对应”的单一下载器
+  (function () {
+    var ua = navigator.userAgent || '';
+    var btn = document.getElementById('heroDl');
+    var iosBtn = document.getElementById('heroIosBtn');
+    if (!btn) return;
+    var label = btn.querySelector('.hero-dl-label');
+    var dl = 'https://wlan.suspect.top/dl/';
+    var target = null, text = null;
+    if (/Android/i.test(ua)) { target = dl + 'wlan-auto-connect-v1.2.1-arm64-v8a.apk'; text = '下载 Android 版（64 位）'; }
+    else if (/iPhone|iPod/i.test(ua) || (/iPad/i.test(ua) && !/Mac OS X/i.test(ua))) { target = 'share.html'; text = '获取 iPhone / iPad 快捷指令'; }
+    else if (/Windows/i.test(ua)) { target = dl + 'wlan-auto-connect-v1.1.0-setup.exe'; text = '下载 Windows 版'; }
+    if (target) {
+      btn.setAttribute('href', target);
+      if (label) label.textContent = text;
+      if (iosBtn) iosBtn.style.display = 'none'; // 顶部只保留一个下载器，避免与智能按钮重复
+    }
+    // 未识别（Mac / Linux / iPad 桌面模式等）保持默认：滚动到三平台下载区，自行选择
+  })();
+</script>
+
+<!-- Knocket 在线客服组件（仅首页，涉及账号密码的 share 页面不接入） -->
+<script src="https://trtc.io/knocket-sdk/sdk.js?identifier=451bb0d3978853a013&v=1792365754296" async></script>
+
+</body>
+</html>

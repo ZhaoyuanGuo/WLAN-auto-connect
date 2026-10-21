@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置：默认禁止明文（HTTP）流量。
+
+  重要说明（2026-10-14 HTTPDNS 接入 + 云同步切 HTTPS 域名后修订）：
+  本文件目前**不是本应用明文流量的实际约束点**，而是防御性默认值。原因是两条
+  认证路径都不走 Android 的 Java 网络栈：
+  - Dart 侧（PortalClient / CloudApi）使用 dart:io HttpClient，基于自建 socket，
+    不受 NetworkSecurityPolicy 约束；
+  - 原生侧（CampusLogin，供小组件/磁贴/开机使用）已改为裸 Socket 实现的最小
+    HTTP 客户端，同样不受该策略约束——这是刻意的：Dr.COM 门户地址是用户可
+    配置的（还支持自动探测），静态白名单无法覆盖，此前用 HttpURLConnection
+    会导致"App 内认证成功、后台路径静默失败"的分歧。
+
+  变更历史：
+  - 2026-10-14 前：曾在此放行 111.229.33.249（云同步过渡期 IP 直连）。
+    现已切至 https://auth.suspect.top / https://wlan-sync.suspect.top（LE 泛域名
+    证书），HTTPDNS DoH 通道亦为 HTTPS，不再需要任何明文白名单。
+
+  保留 base-config 收紧与下方白名单的意义：若将来引入任何走 Java 网络栈的
+  调用（如 OkHttp/HttpURLConnection/WebView），默认仍会拦截明文，需要显式
+  在此放行。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <!-- 校园网认证门户（默认 172.16.200.11，可配置） -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">172.16.200.11</domain>
+    </domain-config>
+</network-security-config>

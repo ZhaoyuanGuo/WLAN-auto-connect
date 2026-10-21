@@ -4,6 +4,7 @@ import 'dart:io';
 import '../mobile/config_store.dart';
 import '../services/auto_login_service.dart';
 import '../services/debug_log.dart';
+import '../services/portal_config.dart';
 import 'cloud_api.dart';
 import 'token_manager.dart';
 
@@ -24,8 +25,8 @@ class CloudSyncService {
       final passwords = await svc.exportPasswords();
       return {
         'v': 1,
-        'host': cfg['host'] ?? '172.16.200.11',
-        'eport': cfg['eport'] ?? 801,
+        'host': cfg['host'] ?? PortalConfig.defaultHost,
+        'eport': cfg['eport'] ?? PortalConfig.defaultEport,
         'autoLoginSsid': autoLoginSsid,
         'profiles': [
           for (final p in profiles.values)
@@ -86,8 +87,8 @@ class CloudSyncService {
         ],
         passwords: {for (final e in items) e.ssid: e.password},
         autoLoginSsid: autoSsid,
-        host: (blob['host'] ?? cfg['host'] ?? '172.16.200.11') as String,
-        eport: ((blob['eport'] ?? cfg['eport'] ?? 801) as num).toInt(),
+        host: (blob['host'] ?? cfg['host'] ?? PortalConfig.defaultHost) as String,
+        eport: ((blob['eport'] ?? cfg['eport'] ?? PortalConfig.defaultEport) as num).toInt(),
       );
       if (!ok) throw ApiException(-1, '恢复写入失败：$msg');
       return;

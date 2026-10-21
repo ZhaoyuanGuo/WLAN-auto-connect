@@ -48,6 +48,8 @@ class _CloudCardState extends State<CloudCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     if (_loading) {
       return const Card(
         child: Padding(
@@ -66,15 +68,15 @@ class _CloudCardState extends State<CloudCard> {
       child: ListTile(
         leading: Icon(
           _loggedIn ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-          color: _loggedIn ? const Color(0xFF2E7D32) : Colors.grey.shade600,
+          color: _loggedIn ? scheme.primary : scheme.outline,
         ),
         title: Text(
           _loggedIn ? '云端同步已开启' : '云端同步（多设备备份恢复）',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleSmall,
         ),
         subtitle: Text(
           _loggedIn ? '友爱账号 $_phone · 上次同步 $_syncText' : '登录友爱账号（Uniai）后可多设备备份恢复',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          style: theme.textTheme.bodySmall,
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () async {
@@ -181,10 +183,8 @@ class _CloudPageState extends State<CloudPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Text(title),
-        content: Text(content,
-            style: const TextStyle(fontSize: 13.5, height: 1.6)),
+        content: Text(content, style: Theme.of(ctx).textTheme.bodyMedium),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -292,75 +292,69 @@ class _CloudPageState extends State<CloudPage> {
   // ---------------- 登录 / 注册 ----------------
 
   Widget _buildAuthPanel() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Icon(Icons.cloud_outlined, size: 44, color: Color(0xFF3D5AFE)),
-            const SizedBox(height: 8),
-            const Text('友爱账号（Uniai）· 一次注册，多端登录',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('登录')),
-                ButtonSegment(value: false, label: Text('注册')),
-              ],
-              selected: {_isLogin},
-              onSelectionChanged: (s) => setState(() => _isLogin = s.first),
-              showSelectedIcon: false,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              maxLength: 11,
-              decoration: const InputDecoration(
-                labelText: '手机号',
-                prefixIcon: Icon(Icons.phone_android_outlined),
-                border: OutlineInputBorder(),
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pwdCtrl,
-              obscureText: true,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: '密码（8-64 位）',
-                prefixIcon: Icon(Icons.lock_outline),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _busy ? null : _submit,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              child: _busy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(_isLogin ? '登录' : '注册并登录'),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '友爱账号密码经服务器加密保存；WiFi 档案上传前由服务器按账号独立加密存储，'
-              '仅你本人登录后可读取。可随时在同步页删除云端备份。',
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(Icons.cloud_outlined,
+              size: 40, color: theme.colorScheme.primary),
+          const SizedBox(height: 8),
+          Text('友爱账号（Uniai）· 一次注册，多端登录',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 11.5, color: Colors.grey.shade600, height: 1.6),
+              style: theme.textTheme.titleMedium),
+          const SizedBox(height: 16),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: true, label: Text('登录')),
+              ButtonSegment(value: false, label: Text('注册')),
+            ],
+            selected: {_isLogin},
+            onSelectionChanged: (s) => setState(() => _isLogin = s.first),
+            showSelectedIcon: false,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _phoneCtrl,
+            keyboardType: TextInputType.phone,
+            maxLength: 11,
+            decoration: const InputDecoration(
+              labelText: '手机号',
+              prefixIcon: Icon(Icons.phone_android_outlined),
+              counterText: '',
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _pwdCtrl,
+            obscureText: true,
+            onSubmitted: (_) => _submit(),
+            decoration: const InputDecoration(
+              labelText: '密码（8-64 位）',
+              prefixIcon: Icon(Icons.lock_outline),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _busy ? null : _submit,
+            style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48)),
+            child: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(_isLogin ? '登录' : '注册并登录'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '友爱账号密码经服务器加密保存；WiFi 档案上传前由服务器按账号独立加密存储，'
+            '仅你本人登录后可读取。可随时在同步页删除云端备份。',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelSmall?.copyWith(height: 1.6),
+          ),
+        ],
       ),
     );
   }
@@ -368,19 +362,19 @@ class _CloudPageState extends State<CloudPage> {
   // ---------------- 已登录 ----------------
 
   Widget _buildSyncPanel() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Card(
           child: ListTile(
-            leading: const Icon(Icons.account_circle_outlined,
-                color: Color(0xFF3D5AFE), size: 34),
-            title: Text(_phone,
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            leading: Icon(Icons.account_circle_outlined,
+                color: scheme.primary, size: 34),
+            title: Text(_phone, style: theme.textTheme.titleMedium),
             subtitle: Text(
               _cloudEmpty ? '云端暂无备份' : '上次同步：$_syncText',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              style: theme.textTheme.bodySmall,
             ),
           ),
         ),
@@ -394,10 +388,7 @@ class _CloudPageState extends State<CloudPage> {
                 FilledButton.icon(
                   onPressed: _busy ? null : _upload,
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
+                      minimumSize: const Size.fromHeight(48)),
                   icon: _busy
                       ? const SizedBox(
                           width: 14,
@@ -410,10 +401,7 @@ class _CloudPageState extends State<CloudPage> {
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _download,
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
+                      minimumSize: const Size.fromHeight(48)),
                   icon: const Icon(Icons.cloud_download_outlined, size: 18),
                   label: const Text('从云端恢复到本机'),
                 ),
@@ -426,17 +414,15 @@ class _CloudPageState extends State<CloudPage> {
           child: Column(
             children: [
               ListTile(
-                leading:
-                    const Icon(Icons.delete_outline, color: Color(0xFFD32F2F)),
-                title: const Text('删除云端备份',
-                    style: TextStyle(fontSize: 14)),
+                leading: Icon(Icons.delete_outline, color: scheme.error),
+                title: Text('删除云端备份',
+                    style: TextStyle(color: scheme.error)),
                 onTap: _busy ? null : _deleteCloud,
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.logout, color: Colors.grey),
-                title:
-                    const Text('退出登录', style: TextStyle(fontSize: 14)),
+                leading: const Icon(Icons.logout),
+                title: const Text('退出登录'),
                 onTap: _busy ? null : _logout,
               ),
             ],
@@ -447,7 +433,7 @@ class _CloudPageState extends State<CloudPage> {
           '云端仅保存最近一次整体备份（WiFi 档案含密码，服务端加密存储）；'
           '备份为整体覆盖，不做多版本保留。',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
+          style: theme.textTheme.labelSmall,
         ),
       ],
     );

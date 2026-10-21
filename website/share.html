@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="iPhone / iPad 校园网自动登录：导入快捷指令一次，首次运行输入账号密码只存本机，以后一连校园网就自动登录。账号密码不上传任何服务器。">
+  <title>iPhone / iPad 校园网自动登录 - 校园网自动登录</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .tool-wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+    .tool-head { text-align: center; margin-bottom: 28px; }
+    .tool-head h1 { font-size: 30px; margin-bottom: 10px; letter-spacing: -0.5px; }
+    .tool-head p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+
+    .steps { margin-top: 24px; }
+    .step {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 12px;
+      display: flex; gap: 14px;
+    }
+    .step-num {
+      width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+      background: var(--primary-light); color: var(--primary);
+      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;
+    }
+    .step-body { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+    .step-body strong { color: var(--text); }
+    .step-body code { background: var(--surface-muted); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+
+    .phase-label { display: flex; align-items: center; gap: 10px; margin: 34px 0 14px; font-size: 18px; font-weight: 700; color: var(--text); }
+    .phase-label:first-of-type { margin-top: 0; }
+    .phase-label .n { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+    .phase-label .tag { font-size: 12px; font-weight: 500; color: #fff; background: var(--primary-light); padding: 3px 10px; border-radius: 20px; }
+
+    .install-card { background: linear-gradient(135deg, #EFF6FF, #F5F3FF); border: 1px solid var(--primary-lighter); border-radius: var(--radius-xl); padding: 22px; }
+    .install-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.75; margin-bottom: 16px; }
+    .install-card p strong { color: var(--text); }
+    .btn-import { display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; background: var(--primary); color: #fff; border-radius: var(--radius); font-size: 16px; font-weight: 600; text-decoration: none; transition: background 0.2s; }
+    .btn-import:hover { background: var(--primary-dark); }
+
+    .alt-link { margin-top: 34px; text-align: center; font-size: 14px; color: var(--text-muted); line-height: 1.8; }
+    .alt-link a { color: var(--primary); }
+    .back-link { display: inline-block; margin-top: 18px; font-size: 14px; color: var(--primary); }
+  </style>
+</head>
+<body>
+
+<nav class="landing-nav">
+  <div class="landing-nav-left">
+    <a href="index.html" style="display:flex;align-items:center;gap:10px;">
+      <svg width="28" height="28" viewBox="0 0 96 96" fill="none">
+        <rect width="96" height="96" rx="22" fill="#3B82F6"/>
+        <g stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" fill="none">
+          <path d="M33.9 45.9 A20 20 0 0 1 62.1 45.9"/>
+          <path d="M25.4 37.4 A32 32 0 0 1 70.6 37.4"/>
+        </g>
+        <path d="M48 52 L61 60 L48 68 L35 60 Z" fill="#FFFFFF"/>
+        <path d="M61.5 62 V70" stroke="#FFD34D" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <circle cx="61.5" cy="72.5" r="2.6" fill="#FFD34D"/>
+      </svg>
+      <span>校园网自动登录</span>
+    </a>
+  </div>
+  <a class="btn-nav-github" href="https://github.com/ZhaoyuanGuo/WLAN-auto-connect" target="_blank" rel="noopener">GitHub</a>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-head">
+    <div class="hero-badge">iPhone / iPad 快捷指令 · 校园网自动登录</div>
+    <h1>在 iPhone / iPad 上自动登录校园网</h1>
+    <p>适用于<strong>辽宁警察学院 LNPC-STU</strong> 校园网。<strong>导入一次</strong>快捷指令，首次运行按提示输入账号密码（<strong>只存本机</strong>），以后一连校园网就自动登录。<br>全程在设备本地处理，<strong>账号密码不上传任何服务器</strong>。</p>
+  </div>
+
+  <div class="phase-label"><span class="n">★</span> 本机存储 · 自动登录<span class="tag">一次配置，之后免操作</span></div>
+  <div class="install-card">
+    <p>用 <strong>iPhone / iPad 自带的 Safari</strong> 点下方按钮，把「校园网自动登陆」快捷指令添加到本机。母版<strong>不含任何账号密码</strong>、只在你自己设备上运行，可放心安装。</p>
+    <a class="btn-import" href="https://www.icloud.com/shortcuts/d75cb87de98f456894d767503c4aa036" target="_blank" rel="noopener">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+      导入「校园网自动登陆」快捷指令
+    </a>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>导入快捷指令。</strong>Safari 点上方按钮 → 打开快捷指令 App → 添加「校园网自动登陆」。</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>连校园 WiFi，运行一次。</strong>首次会依次提示输入<strong>账号</strong>、<strong>密码</strong>，之后自动完成门户认证并弹出「认证成功」。凭证只存 iPhone / iPad 本机（<code>campus.txt</code>），<strong>不上传、不同步 iCloud</strong>。</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>以后自动登录。</strong>再次连上校园网直接运行即免输入；想彻底免点，进快捷指令底部「自动化」→ 创建个人自动化 → 选「Wi-Fi」连接到学校 WiFi（SSID：<code>LNPC-STU</code>）时 → 添加「运行快捷指令：校园网自动登陆」。</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>换密码 / 换学校。</strong>改密码后：在「文件」App 删除本机 <code>campus.txt</code>，重新运行输入新密码即可。母版已内置<strong>辽宁警察学院（LNPC）</strong>服务器地址；其他学校需自行把快捷指令里的 <code>host</code> / <code>eport</code> 改成自己学校的。</div>
+    </div>
+  </div>
+
+  <p class="alt-link">
+    不方便把密码存本机？也可以改用 <a href="share-code.html">剪贴板分享码方案（每次登录需重新复制）→</a>
+  </p>
+  <p style="text-align:center;"><a class="back-link" href="index.html">← 返回官网首页</a></p>
+</div>
+
+<footer class="landing-footer">
+  <p>校园网自动登录 · 校园网静默认证辅助工具</p>
+  <p class="footer-sub">本工具仅供学习交流与个人校园网自动认证使用，请遵守所在学校/单位的网络管理规定</p>
+</footer>
+
+</body>
+</html>

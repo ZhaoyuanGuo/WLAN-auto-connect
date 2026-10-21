@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# Qoder IDE 工作目录（agent 会话产物与 wiki 缓存，不入库）
+/.qoder/

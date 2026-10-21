@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31) 的备份/迁移规则。
+
+  应用已设 android:allowBackup="false"，本文件是同一意图在新机制下的显式声明，
+  防止 OEM 定制 ROM 忽略 allowBackup 时把校园网账号密码带出设备：
+  - HomeWidgetPreferences：存有账号密码（供小组件后台认证读取）
+  - FlutterSecureStorage / FlutterSecureKeyStorage：云同步令牌
+  - FlutterSharedPreferences：其它本地配置
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="HomeWidgetPreferences.xml" />
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+        <exclude domain="sharedpref" path="FlutterSecureKeyStorage.xml" />
+        <exclude domain="sharedpref" path="FlutterSharedPreferences.xml" />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="HomeWidgetPreferences.xml" />
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+        <exclude domain="sharedpref" path="FlutterSecureKeyStorage.xml" />
+        <exclude domain="sharedpref" path="FlutterSharedPreferences.xml" />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>

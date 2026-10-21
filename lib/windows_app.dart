@@ -1,13 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'cloud/cloud_page.dart';
 import 'services/auto_login_service.dart';
 import 'services/debug_log.dart';
 import 'services/portal_client.dart';
+import 'services/portal_config.dart';
 import 'services/wifi_service.dart';
+import 'widgets/agreement_scaffold.dart';
 
 /// Windows 端启动引导：窗口初始化后进入 Windows 版主页。
 /// （自 main.dart 迁移而来，逻辑保持不变，仅类名 MyApp → WindowsApp。）
@@ -140,6 +143,10 @@ class _LaunchGateState extends State<LaunchGate> {
 
   @override
   Widget build(BuildContext context) {
+    // [临时-截图用] SHOT_PAGE=cloud 直接进入云端登录页，验证后删除
+    if (const String.fromEnvironment('SHOT_PAGE') == 'cloud') {
+      return const CloudPage();
+    }
     return _entered
         ? const HomePage()
         : AgreementPage(
@@ -149,230 +156,104 @@ class _LaunchGateState extends State<LaunchGate> {
   }
 }
 
-/// 用户协议页：内容滚动到底部后才能点击「同意并继续」。
-class AgreementPage extends StatefulWidget {
+/// 用户协议页（Windows 措辞）：复用 [AgreementScaffold] 的滚动门控逻辑。
+class AgreementPage extends StatelessWidget {
   const AgreementPage({super.key, required this.onAgree, required this.onDecline});
 
   final VoidCallback onAgree;
   final VoidCallback onDecline;
 
-  @override
-  State<AgreementPage> createState() => _AgreementPageState();
-}
-
-class _AgreementPageState extends State<AgreementPage> {
-  final _scroll = ScrollController();
-  bool _readComplete = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_checkRead);
-    // 延迟两帧再判定，等布局稳定（避免首帧 maxScrollExtent 尚为 0 时
-    // 把长内容误判为已读完）；内容确实不足一屏时仍会视为已读完
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkRead());
-    });
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _checkRead() {
-    if (!mounted || !_scroll.hasClients || _readComplete) return;
-    if (_scroll.position.maxScrollExtent - _scroll.offset <= 12) {
-      setState(() => _readComplete = true);
-    }
-  }
-
-  Widget _section(String title, String body) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 13.5, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(
-              body,
-              style: TextStyle(
-                  fontSize: 12.5, height: 1.6, color: Colors.grey.shade700),
-            ),
-          ],
-        ),
-      );
+  static const _sections = <AgreementSection>[
+    AgreementSection(
+      '一、协议的接受与修订',
+      '欢迎使用校园网自动登录（以下简称"本软件"）。请您仔细阅读本协议，'
+          '您勾选同意、点击"同意并继续"或实际使用本软件，'
+          '即视为您已充分理解并接受本协议全部条款。'
+          '若您不同意本协议任何内容，请点击"退出应用"并立即停止使用。'
+          '本软件后续版本可能对本协议进行修订，修订内容随新版本一并发布，'
+          '请您留意更新说明；若您在协议修订后继续使用本软件，'
+          '视为您已接受修订后的协议。',
+    ),
+    AgreementSection(
+      '二、软件功能与用途',
+      '本软件是面向使用 Dr.COM / 哆点认证的校园网的免费辅助登录工具，'
+          '用于在连接校园网 WiFi 后自动完成网页认证，'
+          '并可选支持开机后对指定 WiFi 静默登录。'
+          '本软件完全在本地运行，不包含任何广告、推广或收费内容，'
+          '也不隶属于校园网运营商或认证设备厂商。',
+    ),
+    AgreementSection(
+      '三、数据与隐私保护',
+      '本软件高度重视您的个人信息保护：\n'
+          '1. 本地存储：您填写的校园网账号、密码及各 WiFi 配置，'
+          '仅保存在本机 %APPDATA%\\CampusNetAutoLogin\\ 目录中，不共享；\n'
+          '2. 加密保护：密码经 Windows DPAPI（数据保护接口）加密，'
+          '仅当前 Windows 账户可解密；\n'
+          '3. 可选云同步：默认不同步任何数据。仅当您主动登录并使用'
+          '"云端同步"功能时，软件才将 WiFi 配置（含密码）上传至开发者'
+          '自建服务器做加密备份（传输与落盘均加密），用于多设备恢复，'
+          '您可随时删除云端备份或退出登录；\n'
+          '4. 不收集数据：本软件不含统计、埋点或行为上报，'
+          '不收集您的任何浏览记录或使用行为数据；\n'
+          '5. 本地探测：软件通过 Windows 系统命令（netsh）在本机扫描可见 WiFi'
+          '及读取当前连接状态，该信息仅用于界面展示，不会发送到任何外部服务器。',
+    ),
+    AgreementSection(
+      '四、网络请求范围',
+      '本软件严格遵守最小联网原则：\n'
+          '1. 校园网认证：仅向校园网认证服务器（校园内网）'
+          '发送登录、在线状态查询等认证必需的请求；\n'
+          '2. 版本更新：仅在检查或更新软件版本时访问因特网（GitHub 等发布渠道），'
+          '不连接任何其他外部服务器；\n'
+          '3. 除上述范围外，本软件不会主动发起任何网络连接。',
+    ),
+    AgreementSection(
+      '五、账号安全与使用规范',
+      '1. 请妥善保管您的校园网账号与密码，不要将已保存密码的电脑交由他人使用；\n'
+          '2. 请勿将本软件用于登录他人账号，或从事任何违反法律法规'
+          '及学校网络管理规定的行为，由此产生的一切后果由您自行承担；\n'
+          '3. 如需更换电脑或不再使用本软件，建议先取消开机自动登录，'
+          '并删除上述目录中的配置与凭据文件（config.json、cred.json）。',
+    ),
+    AgreementSection(
+      '六、开机自动登录说明',
+      '当您为某个 WiFi 开启开机自动登录后，本软件会在 Windows 任务计划程序中'
+          '创建名为 CampusNetAutoLogin 的计划任务，'
+          '并在您登录 Windows 后自动尝试连接并认证该 WiFi（仅限您指定的一个 WiFi）。'
+          '您可以随时在软件内更换或取消，也可在任务计划程序中手动删除该任务。',
+    ),
+    AgreementSection(
+      '七、知识产权',
+      '本软件的设计、代码及相关文档的知识产权归开发者所有。'
+          '软件中提及的第三方名称、商标归其各自权利人所有，'
+          '仅用于说明兼容对象。未经许可，请勿复制、修改、反编译'
+          '或用于商业用途；欢迎在遵守学校规定的前提下校内自由分享使用。',
+    ),
+    AgreementSection(
+      '八、免责声明与责任限制',
+      '1. 本软件按"现状"提供，开发者不对软件的适用性、无错误或不中断作出担保；\n'
+          '2. 因校园网认证服务器策略调整、网络故障、系统更新等非软件原因'
+          '导致登录失败或使用异常的，开发者不承担责任；\n'
+          '3. 在遵守本协议的前提下，对于因使用或无法使用本软件'
+          '造成的直接损失，开发者承担责任上限以零为限（本软件为免费软件）；\n'
+          '4. 您因违反本协议或学校规定使用本软件而产生的一切后果，由您自行承担。',
+    ),
+    AgreementSection(
+      '九、协议的终止与其他',
+      '1. 您可随时删除本软件以终止使用，终止后本协议自动失效，'
+          '但第五条中的保管义务不受影响；\n'
+          '2. 本协议未尽事宜，依照中华人民共和国相关法律法规执行；\n'
+          '3. 如对本协议有任何疑问或建议，欢迎通过软件发布页反馈。'
+          '点击"同意并继续"即表示您已完整阅读并接受以上全部内容。',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.wifi, color: Color(0xFF3D5AFE), size: 26),
-                const SizedBox(width: 10),
-                const Text('用户协议与隐私声明',
-                    style:
-                        TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Expanded(
-              child: Card(
-                child: SingleChildScrollView(
-                  controller: _scroll,
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _section(
-                        '一、协议的接受与修订',
-                        '欢迎使用校园网自动登录（以下简称"本软件"）。请您仔细阅读本协议，'
-                            '您勾选同意、点击"同意并继续"或实际使用本软件，'
-                            '即视为您已充分理解并接受本协议全部条款。'
-                            '若您不同意本协议任何内容，请点击"退出应用"并立即停止使用。'
-                            '本软件后续版本可能对本协议进行修订，修订内容随新版本一并发布，'
-                            '请您留意更新说明；若您在协议修订后继续使用本软件，'
-                            '视为您已接受修订后的协议。',
-                      ),
-                      _section(
-                        '二、软件功能与用途',
-                        '本软件是面向使用 Dr.COM / 哆点认证的校园网的免费辅助登录工具，'
-                            '用于在连接校园网 WiFi 后自动完成网页认证，'
-                            '并可选支持开机后对指定 WiFi 静默登录。'
-                            '本软件完全在本地运行，不包含任何广告、推广或收费内容，'
-                            '也不隶属于校园网运营商或认证设备厂商。',
-                      ),
-                      _section(
-                        '三、数据与隐私保护',
-                        '本软件高度重视您的个人信息保护：\n'
-                            '1. 本地存储：您填写的校园网账号、密码及各 WiFi 配置，'
-                            '仅保存在本机 %APPDATA%\\CampusNetAutoLogin\\ 目录中，不共享；\n'
-                            '2. 加密保护：密码经 Windows DPAPI（数据保护接口）加密，'
-                            '仅当前 Windows 账户可解密；\n'
-                            '3. 可选云同步：默认不同步任何数据。仅当您主动登录并使用'
-                            '"云端同步"功能时，软件才将 WiFi 配置（含密码）上传至开发者'
-                            '自建服务器做加密备份（传输与落盘均加密），用于多设备恢复，'
-                            '您可随时删除云端备份或退出登录；\n'
-                            '4. 不收集数据：本软件不含统计、埋点或行为上报，'
-                            '不收集您的任何浏览记录或使用行为数据；\n'
-                            '5. 本地探测：软件通过 Windows 系统命令（netsh）在本机扫描可见 WiFi'
-                            '及读取当前连接状态，该信息仅用于界面展示，不会发送到任何外部服务器。',
-                      ),
-                      _section(
-                        '四、网络请求范围',
-                        '本软件严格遵守最小联网原则：\n'
-                            '1. 校园网认证：仅向校园网认证服务器（校园内网 172.16.200.11）'
-                            '发送登录、在线状态查询等认证必需的请求；\n'
-                            '2. 版本更新：仅在检查或更新软件版本时访问因特网（GitHub 等发布渠道），'
-                            '不连接任何其他外部服务器；\n'
-                            '3. 除上述范围外，本软件不会主动发起任何网络连接。',
-                      ),
-                      _section(
-                        '五、账号安全与使用规范',
-                        '1. 请妥善保管您的校园网账号与密码，不要将已保存密码的电脑交由他人使用；\n'
-                            '2. 请勿将本软件用于登录他人账号，或从事任何违反法律法规'
-                            '及学校网络管理规定的行为，由此产生的一切后果由您自行承担；\n'
-                            '3. 如需更换电脑或不再使用本软件，建议先取消开机自动登录，'
-                            '并删除上述目录中的配置与凭据文件（config.json、cred.json）。',
-                      ),
-                      _section(
-                        '六、开机自动登录说明',
-                        '当您为某个 WiFi 开启开机自动登录后，本软件会在 Windows 任务计划程序中'
-                            '创建名为 CampusNetAutoLogin 的计划任务，'
-                            '并在您登录 Windows 后自动尝试连接并认证该 WiFi（仅限您指定的一个 WiFi）。'
-                            '您可以随时在软件内更换或取消，也可在任务计划程序中手动删除该任务。',
-                      ),
-                      _section(
-                        '七、知识产权',
-                        '本软件的设计、代码及相关文档的知识产权归开发者所有。'
-                            '软件中提及的第三方名称、商标归其各自权利人所有，'
-                            '仅用于说明兼容对象。未经许可，请勿复制、修改、反编译'
-                            '或用于商业用途；欢迎在遵守学校规定的前提下校内自由分享使用。',
-                      ),
-                      _section(
-                        '八、免责声明与责任限制',
-                        '1. 本软件按"现状"提供，开发者不对软件的适用性、无错误或不中断作出担保；\n'
-                            '2. 因校园网认证服务器策略调整、网络故障、系统更新等非软件原因'
-                            '导致登录失败或使用异常的，开发者不承担责任；\n'
-                            '3. 在遵守本协议的前提下，对于因使用或无法使用本软件'
-                            '造成的直接损失，开发者承担责任上限以零为限（本软件为免费软件）；\n'
-                            '4. 您因违反本协议或学校规定使用本软件而产生的一切后果，由您自行承担。',
-                      ),
-                      _section(
-                        '九、协议的终止与其他',
-                        '1. 您可随时删除本软件以终止使用，终止后本协议自动失效，'
-                            '但第五条中的保管义务不受影响；\n'
-                            '2. 本协议未尽事宜，依照中华人民共和国相关法律法规执行；\n'
-                            '3. 如对本协议有任何疑问或建议，欢迎通过软件发布页反馈。'
-                            '点击"同意并继续"即表示您已完整阅读并接受以上全部内容。',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _readComplete ? Icons.check_circle : Icons.arrow_downward,
-                  size: 15,
-                  color:
-                      _readComplete ? const Color(0xFF2E7D32) : Colors.grey.shade500,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  _readComplete ? '已阅读完毕' : '请将协议滑动至底部后再同意',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color:
-                        _readComplete ? const Color(0xFF2E7D32) : Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: widget.onDecline,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('退出应用'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _readComplete ? widget.onAgree : null,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('同意并继续',
-                        style: TextStyle(fontSize: 15)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    return AgreementScaffold(
+      sections: _sections,
+      onAgree: onAgree,
+      onDecline: onDecline,
     );
   }
 }
@@ -477,7 +358,14 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _service = AutoLoginService();
   final _wifi = WifiService();
-  late final _client = PortalClient();
+
+  /// 门户客户端：host/eport 跟随已保存配置（设置页可修改），
+  /// 配置变更后需调用 [_rebuildClient] 重建。
+  late PortalClient _client = PortalClient();
+
+  /// 当前生效的认证服务器地址（默认取 PortalConfig）。
+  String _host = PortalConfig.defaultHost;
+  int _eport = PortalConfig.defaultEport;
 
   final _accountCtl = TextEditingController();
   final _passwordCtl = TextEditingController();
@@ -531,6 +419,62 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  /// 导出诊断日志：合并内存日志、Dart 磁盘日志与 PowerShell 脚本日志，
+  /// 复制到剪贴板供问题反馈。账号等敏感信息在写入时已脱敏。
+  Future<void> _exportDiagnostics() async {
+    String psLog = '';
+    try {
+      final f = File('${AutoLoginService.dir}\\autologin.log');
+      if (f.existsSync()) {
+        final text = f.readAsStringSync();
+        // PowerShell 日志过大时仅取末尾 32KB，避免剪贴板超限
+        psLog = text.length > 32 * 1024
+            ? text.substring(text.length - 32 * 1024)
+            : text;
+      }
+    } catch (_) {}
+    final buf = StringBuffer()
+      ..writeln('=== 校园网自动登录 · 诊断日志（Windows）===')
+      ..writeln('导出时间：${DateTime.now().toIso8601String()}')
+      ..writeln('认证服务器：$_host:$_eport')
+      ..writeln('自启 WiFi：${_autoLoginSsid.isEmpty ? '(未设置)' : _autoLoginSsid}'
+          ' · 档案数：${_profiles.length}（账号已脱敏）')
+      ..writeln('任务计划：${_taskRegistered ? '已注册' : '未注册'}'
+          ' · 弹窗屏蔽：${_popupFixOn ? '已开启' : '关闭'}')
+      ..writeln('--- 本次会话日志 ---')
+      ..writeln(_logs.isEmpty ? '(无)' : _logs.join('\n'))
+      ..writeln('--- Dart 磁盘日志 ---')
+      ..writeln(readLog().isEmpty ? '(无)' : readLog())
+      ..writeln('--- PowerShell 脚本日志（末尾）---')
+      ..writeln(psLog.isEmpty ? '(无)' : psLog);
+    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    dlog('DIAG_EXPORT len=${buf.length}');
+    _snack('诊断日志已复制到剪贴板');
+  }
+
+  /// 官网地址：与 website/ 目录部署的 wlan.suspect.top 保持一致，
+  /// 供顶栏「访问官网」入口与失败回退复制到剪贴板使用。
+  static const _websiteUrl = 'https://wlan.suspect.top';
+
+  /// 调用系统默认浏览器打开官网。explorer.exe 直接接受 URL 参数并转交
+  /// 系统注册的 http 协议处理程序，避免引入 url_launcher 依赖。
+  /// 若浏览器不可用或调用异常，退化为将链接复制到剪贴板供手动粘贴。
+  Future<void> _openWebsite() async {
+    dlog('OPEN_WEBSITE');
+    try {
+      final r = await Process.run('explorer', [_websiteUrl]);
+      // explorer 打开 URL 通常返回 0，但个别 Windows 版本会返回非零，
+      // 因此不严格判错，仅在抛异常时兜底复制。
+      _log('已在系统默认浏览器中打开官网：$_websiteUrl'
+          '${r.exitCode != 0 ? '（exit=${r.exitCode}）' : ''}');
+    } catch (e) {
+      dlog('OPEN_WEBSITE_FAIL $e');
+      await Clipboard.setData(const ClipboardData(text: _websiteUrl));
+      _log('打开浏览器失败：$e，官网链接已复制到剪贴板');
+      _snack('打开浏览器失败，官网链接已复制到剪贴板');
+    }
+  }
+
   Future<void> _bootstrap() async {
     dlog('BOOT_START');
     try {
@@ -543,15 +487,19 @@ class _HomePageState extends State<HomePage> {
       final (profiles, autoSsid) = await _service.readProfiles();
       _profiles = profiles;
       _autoLoginSsid = autoSsid;
+      final cfg = await _service.readConfig();
+      _host = (cfg?['host'] ?? PortalConfig.defaultHost) as String;
+      _eport = ((cfg?['eport'] ?? PortalConfig.defaultEport) as num).toInt();
+      _rebuildClient();
       dlog(
-          'CONFIG_LOADED profiles=${profiles.length} autoLoginSsid=$autoSsid');
+          'CONFIG_LOADED profiles=${profiles.length} autoLoginSsid=$autoSsid host=$_host:$_eport');
     } catch (e) {
       dlog('READ_CONFIG_FAIL $e');
       _log('读取已保存配置失败：$e');
     }
     if (_autoLoginSsid.isNotEmpty) {
       _selectNetwork(_autoLoginSsid, refreshList: false);
-      _log('已加载开机自启 WiFi：$_autoLoginSsid（账号：${_profiles[_autoLoginSsid]?.account}）');
+      _log('已加载开机自启 WiFi：$_autoLoginSsid（账号：${maskAccount(_profiles[_autoLoginSsid]?.account ?? '')}）');
     } else if (_profiles.isNotEmpty) {
       _log('已保存 ${_profiles.length} 个 WiFi 账号档案，尚未指定开机自启 WiFi。');
     }
@@ -569,6 +517,12 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {
       return false;
     }
+  }
+
+  /// 按当前 host/eport 重建门户客户端。
+  void _rebuildClient() {
+    _client.dispose();
+    _client = PortalClient(host: _host, eport: _eport);
   }
 
   // ---------------- WiFi 扫描与档案 ----------------
@@ -652,6 +606,8 @@ class _HomePageState extends State<HomePage> {
       profiles: all,
       passwords: {ssid: password}, // 空串 = 沿用旧密码
       autoLoginSsid: auto,
+      host: _host,
+      eport: _eport,
     );
     if (ok) {
       setState(() {
@@ -683,6 +639,8 @@ class _HomePageState extends State<HomePage> {
       profiles: _profiles.values.toList(),
       passwords: const {}, // 全部沿用已存密码
       autoLoginSsid: ssid,
+      host: _host,
+      eport: _eport,
     );
     if (ok) {
       setState(() => _autoLoginSsid = ssid);
@@ -1037,6 +995,11 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 6),
                 Text(stateText, style: TextStyle(color: stateColor, fontSize: 14)),
                 IconButton(
+                  onPressed: _openWebsite,
+                  tooltip: '访问官网（$_websiteUrl）',
+                  icon: const Icon(Icons.language_outlined, size: 20),
+                ),
+                IconButton(
                   onPressed: _busyLogin ? null : _refreshNetState,
                   tooltip: '刷新状态',
                   icon: const Icon(Icons.refresh, size: 20),
@@ -1061,6 +1024,8 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(height: 12),
                           _buildAutoStartCard(),
                           const SizedBox(height: 12),
+                          _buildPortalServerCard(),
+                          const SizedBox(height: 12),
                           const CloudCard(),
                         ],
                       ),
@@ -1083,6 +1048,12 @@ class _HomePageState extends State<HomePage> {
                                         fontSize: 15,
                                         fontWeight: FontWeight.w600)),
                                 const Spacer(),
+                                IconButton(
+                                  onPressed: _exportDiagnostics,
+                                  tooltip: '导出诊断日志（复制到剪贴板）',
+                                  icon: const Icon(Icons.bug_report_outlined,
+                                      size: 18),
+                                ),
                                 IconButton(
                                   onPressed: () => setState(_logs.clear),
                                   tooltip: '清空日志',
@@ -1135,7 +1106,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 6),
             Text(
-              '认证服务器：172.16.200.11（Dr.COM / 哆点） · 脚本位置：${AutoLoginService.dir}',
+              '认证服务器：$_host:$_eport（Dr.COM / 哆点） · 脚本位置：${AutoLoginService.dir}',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500),
             ),
@@ -1315,6 +1286,167 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+
+  /// 认证服务器配置卡片（host / eport）。非默认门户的学校用户可在此修改，
+  /// 保存后写入 config.json（host/eport 字段），并重建门户客户端立即生效。
+  Widget _buildPortalServerCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Text('认证服务器',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text('$_host:$_eport',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.grey.shade600,
+                        fontFamily: 'Consolas')),
+                IconButton(
+                  onPressed: _editPortalServer,
+                  tooltip: '修改认证服务器',
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '认证页地址形如 http://<门户IP>:801/eportal/...。'
+              '默认 172.16.200.11:801，其他学校请改为本校门户地址。',
+              style: TextStyle(
+                  fontSize: 12, color: Colors.grey.shade600, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 编辑认证服务器：支持手动输入与「自动探测」（从 AC 劫持重定向推导）。
+  Future<void> _editPortalServer() async {
+    final hostCtl = TextEditingController(text: _host);
+    final eportCtl = TextEditingController(text: '$_eport');
+    var probing = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          title: const Text('认证服务器'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '请填写校园网认证门户地址。不确定可点「自动探测」'
+                  '（需已连接校园网且尚未认证）。',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade600, height: 1.5),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: hostCtl,
+                  decoration: const InputDecoration(
+                    labelText: '门户地址（IP 或域名）',
+                    prefixIcon: Icon(Icons.dns_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: eportCtl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '端口',
+                    prefixIcon: Icon(Icons.numbers_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: probing
+                      ? null
+                      : () async {
+                          setDlg(() => probing = true);
+                          final r = await PortalClient.detectPortal();
+                          setDlg(() => probing = false);
+                          if (r == null) {
+                            _snack('未探测到门户：请确认已连接校园网且尚未认证',
+                                error: true);
+                            return;
+                          }
+                          hostCtl.text = r.host;
+                          eportCtl.text = '${r.eport}';
+                          _log('自动探测到门户：${r.host}:${r.eport}');
+                        },
+                  icon: probing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.search, size: 18),
+                  label: const Text('自动探测'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final host = hostCtl.text.trim();
+                final eport = int.tryParse(eportCtl.text.trim()) ?? 0;
+                if (!PortalConfig.isValidHost(host)) {
+                  _snack('门户地址格式不正确（不要带 http:// 或路径）',
+                      error: true);
+                  return;
+                }
+                if (!PortalConfig.isValidEport(eport)) {
+                  _snack('端口需为 1-65535', error: true);
+                  return;
+                }
+                setState(() {
+                  _host = host;
+                  _eport = eport;
+                });
+                // 写入 config.json（保留现有 profiles 与自启 WiFi）
+                final (ok, msg) = await _service.saveProfiles(
+                  profiles: _profiles.values.toList(),
+                  passwords: const {}, // 全部沿用已存密码
+                  autoLoginSsid: _autoLoginSsid,
+                  host: _host,
+                  eport: _eport,
+                );
+                if (ok) {
+                  _rebuildClient();
+                  _log('认证服务器已更新为 $host:$eport');
+                  _snack('认证服务器已保存');
+                } else {
+                  _log('认证服务器保存失败：$msg');
+                  _snack('保存失败：$msg', error: true);
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+                await _refreshNetState();
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    hostCtl.dispose();
+    eportCtl.dispose();
   }
 
   Widget _buildAutoStartCard() {

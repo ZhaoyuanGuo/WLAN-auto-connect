@@ -2,14 +2,26 @@
     <!-- 校园网认证必需：访问内网认证服务器 172.16.200.11 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- 扫描 WiFi 与读取当前连接（Android 系统要求定位权限） -->
+    <!-- 扫描 WiFi 与读取当前连接。
+         注意：startScan()/getScanResults() 在所有 Android 版本（含 13+、17）都
+         要求位置权限，NEARBY_WIFI_DEVICES 不能替代它（清单声明了
+         neverForLocation，系统不会把扫描结果作为位置数据放行）；因此定位权限
+         不能设 maxSdkVersion，Android 13+ 也必须保留申请。
+         Android 13+ 的「附近的设备」用于读取当前 SSID / 网络建议等 API，
+         扫描时两者需同时授予（与 WlanMethods.kt 的 requiredWifiPermissions()
+         / hasWifiPermission() 保持一致）。 -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
     <!-- 开机自动认证 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 后台认证失败时用通知给出可见反馈。
+         Android 11+ 已禁止后台应用弹 Toast，原实现的通知/反馈是静默丢失的。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 自动关闭系统联网检测（captive portal），防止连接校园网后自动跳浏览器。
          protectionLevel 为 signature|development，需通过 adb 授予：
          adb shell pm grant cn.lnpc.wlan_auto_connect android.permission.WRITE_SECURE_SETTINGS -->
@@ -19,7 +31,10 @@
         android:label="校园网自动登录"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"

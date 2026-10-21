@@ -88,13 +88,19 @@ class CampusConnectReceiver : BroadcastReceiver() {
         CampusLogin.setStatus(appContext, false, "正在连接...")
         val request = androidx.work.OneTimeWorkRequestBuilder<LoginWorker>().build()
         androidx.work.WorkManager.getInstance(appContext).enqueueUniqueWork(
-            "cn_login", androidx.work.ExistingWorkPolicy.REPLACE, request
+            LoginWorker.WORK_NAME, androidx.work.ExistingWorkPolicy.REPLACE, request
         )
     }
 }
 
-/// 开机自启：开启「开机自动认证」后，开机联网（WLAN 已配置的开放网络会自动重连）
-/// 并延迟约 20 秒执行一次静默认证，对应 Windows 端的开机自启能力。
+/// 开机自启：开机后延迟约 20 秒执行一次静默认证。
+///
+/// 这里**不能**使用 `NetworkType.CONNECTED` 约束：WorkManager 在 API≥26 上把它
+/// 实现为「已连接 **且** 已通过验证（NET_CAPABILITY_VALIDATED）」，而未认证的
+/// 强制门户校园网恰恰不是 validated —— 该功能唯一有用的场景下约束永远不满足，
+/// LoginWorker 会一直停在 ENQUEUED 不执行（界面上开关却显示已开启）。
+/// 现改为不加网络约束，由 LoginWorker 自行判断是否已连上目标 WiFi，
+/// 并以退避重试覆盖「开机 → WiFi 关联 → 取得 IP」这段时间。
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
@@ -106,32 +112,65 @@ class BootReceiver : BroadcastReceiver() {
         val appContext = context.applicationContext
         val cfg = CampusLogin.readConfig(appContext) ?: return
         if (!cfg.bootAutoLogin || cfg.profiles.isEmpty()) return
+
         val request = androidx.work.OneTimeWorkRequestBuilder<LoginWorker>()
-            .setConstraints(
-                androidx.work.Constraints.Builder()
-                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                    .build()
-            )
+            .setInputData(androidx.work.workDataOf(LoginWorker.KEY_FROM_BOOT to true))
             .setInitialDelay(20, java.util.concurrent.TimeUnit.SECONDS)
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.EXPONENTIAL,
+                30,
+                java.util.concurrent.TimeUnit.SECONDS,
+            )
             .build()
+        // 与小组件/磁贴统一用 REPLACE，顺带清掉上次会话可能残留的卡住任务。
         androidx.work.WorkManager.getInstance(appContext).enqueueUniqueWork(
-            "cn_login", androidx.work.ExistingWorkPolicy.KEEP, request
+            LoginWorker.WORK_NAME, androidx.work.ExistingWorkPolicy.REPLACE, request
         )
     }
 }
 
-/// 后台认证任务：无 Flutter 引擎，直接执行原生协议实现并刷新小组件。
+/// 后台认证任务：无 Flutter 引擎，直接执行原生协议实现并刷新小组件/磁贴。
 class LoginWorker(
     context: Context,
     params: androidx.work.WorkerParameters,
 ) : androidx.work.CoroutineWorker(context, params) {
+
+    companion object {
+        const val WORK_NAME = "cn_login"
+        const val KEY_FROM_BOOT = "fromBoot"
+
+        /// 开机路径最大重试次数（30s 起指数退避，覆盖 WiFi 关联 + DHCP 耗时）
+        private const val MAX_BOOT_ATTEMPTS = 8
+    }
+
     override suspend fun doWork(): androidx.work.ListenableWorker.Result {
+        val ctx = applicationContext
+
+        if (inputData.getBoolean(KEY_FROM_BOOT, false) &&
+            !CampusLogin.isOnConfiguredWifi(ctx)
+        ) {
+            // 开机后 WiFi 可能尚未关联/尚未取得 IP。此时既不认证也不写状态
+            // （写「未连接校园网」会把小组件状态从正常覆盖成故障态），改为退避重试。
+            if (runAttemptCount < MAX_BOOT_ATTEMPTS) {
+                return androidx.work.ListenableWorker.Result.retry()
+            }
+            CampusLogin.setStatus(ctx, false, "未连接校园网")
+            CampusNotify.failure(ctx, "开机自动认证未执行：未连接到已配置的校园网 WiFi")
+            return androidx.work.ListenableWorker.Result.success()
+        }
+
         val r = try {
-            CampusLogin.run(applicationContext)
-        } catch (_: Exception) {
+            CampusLogin.run(ctx)
+        } catch (e: Exception) {
+            android.util.Log.w("CampusLogin", "worker 执行异常", e)
+            // 必须写状态：磁贴的乐观态（"正在连接..."）只能由 setStatus 清除，
+            // 否则会永久卡住。
+            CampusLogin.setStatus(ctx, false, "认证异常")
             "TASK_ERROR"
         }
-        // 失败时弹 Toast 给可见反馈（成功由磁贴变色/小组件文案表达）
+
+        // 失败时给出可见反馈。Android 11+ 后台应用弹 Toast 会被系统静默丢弃，
+        // 故改用通知（见 CampusNotify）。
         val msg = when {
             r == "LOGIN_OK" || r == "ONLINE_ALREADY" -> null
             r.startsWith("LOGIN_FAIL:") -> "登录失败：${r.removePrefix("LOGIN_FAIL:")}"
@@ -141,9 +180,8 @@ class LoginWorker(
             r == "UNCONFIRMED" -> "已提交认证但未确认上线，请稍后查看"
             else -> "校园网认证任务异常"
         }
-        if (msg != null) {
-            android.widget.Toast.makeText(applicationContext, msg, android.widget.Toast.LENGTH_LONG).show()
-        }
+        if (msg != null) CampusNotify.failure(ctx, msg)
+
         return androidx.work.ListenableWorker.Result.success()
     }
 }

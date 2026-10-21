@@ -29,12 +29,22 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    override fun onResume() {
+        super.onResume()
+        AppForeground.isForeground = true
+    }
+
+    override fun onPause() {
+        AppForeground.isForeground = false
+        super.onPause()
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray,
     ) {
-        if (!WlanMethods.handlePermissionResult(requestCode, grantResults)) {
+        if (!WlanMethods.handlePermissionResult(this, requestCode, grantResults)) {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         }
     }

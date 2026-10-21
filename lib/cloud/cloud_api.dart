@@ -29,13 +29,52 @@ class AuthExpired implements Exception {
 class CloudApi {
   CloudApi._();
 
-  /// 过渡期端口直连（备案完成后切 HTTPS 域名）
-  static const authBase = 'http://111.229.33.249:3010';
-  static const syncBase = 'http://111.229.33.249:3013';
+  /// 服务端基址。默认指向 HTTPS 域名（已由 nginx 反代 + LE 泛域名证书接管），
+  /// 具体解析交由 HTTPDNS DoH 白名单加速（见 lib/services/httpdns_config.dart）。
+  /// 旧客户端仍可通过 --dart-define 回退 IP 直连：
+  ///   flutter build apk --dart-define=CLOUD_AUTH_BASE=http://111.229.33.249:3010 \
+  ///                     --dart-define=CLOUD_SYNC_BASE=http://111.229.33.249:3013 \
+  ///                     --dart-define=ALLOW_INSECURE_CLOUD=true
+  static const authBase = String.fromEnvironment(
+    'CLOUD_AUTH_BASE',
+    defaultValue: 'https://auth.suspect.top',
+  );
+  static const syncBase = String.fromEnvironment(
+    'CLOUD_SYNC_BASE',
+    defaultValue: 'https://wlan-sync.suspect.top',
+  );
+
+  /// 安全网开关：默认关闭（false），仅当开发者显式传
+  /// `--dart-define=ALLOW_INSECURE_CLOUD=true` 才允许非 HTTPS 基址，
+  /// 便于过渡期旧 IP 直连的回退验证。
+  static const allowInsecureCloud =
+      bool.fromEnvironment('ALLOW_INSECURE_CLOUD', defaultValue: false);
+
   static const appId = 'wlanconnect';
 
   static final _client = http.Client();
   static const _timeout = Duration(seconds: 15);
+
+  /// 校验云服务基址安全性：非 HTTPS 且未显式允许时拒绝发送（防止密码明文外传）。
+  /// 仅在首次使用时检查一次。
+  static bool _checkedSecure = false;
+
+  static void _ensureSecureBase(String url) {
+    if (_checkedSecure) return;
+    if (url.startsWith('https://')) {
+      _checkedSecure = true;
+      return;
+    }
+    if (!allowInsecureCloud) {
+      throw StateError(
+        '云同步基址必须为 HTTPS（当前：$url）。'
+        '请通过 --dart-define=CLOUD_AUTH_BASE / CLOUD_SYNC_BASE 指定 HTTPS 地址，'
+        '或显式设置 ALLOW_INSECURE_CLOUD=true 以在过渡期继续使用明文传输。',
+      );
+    }
+    _checkedSecure = true;
+  }
+
 
   // ================= 账号中心 =================
 
@@ -117,6 +156,8 @@ class CloudApi {
   /// 带 Bearer 的请求执行：401 → 刷新轮换一次 → 重放一次；仍失败抛 AuthExpired
   static Future<Map<String, dynamic>> _send(http.Request request,
       {bool authed = true}) async {
+    // 发送前校验基址安全性：release 下若未显式允许明文则拒绝外发（含密码）。
+    _ensureSecureBase(request.url.toString());
     if (authed) {
       final token = await TokenManager.accessToken();
       if (token == null || token.isEmpty) throw AuthExpired('未登录');

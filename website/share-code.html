@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="校园网快捷指令分享码生成器 —— 在浏览器本地生成 iPhone / iPad 剪贴板版快捷指令可读取的分享码，账号密码不上传任何服务器。">
+  <title>剪贴板分享码生成器 - 校园网自动登录</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .tool-wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+    .tool-head { text-align: center; margin-bottom: 28px; }
+    .tool-head h1 { font-size: 30px; margin-bottom: 10px; letter-spacing: -0.5px; }
+    .tool-head p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+
+    .warn-box {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: #FEF2F2; border: 1px solid #FCA5A5;
+      border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 24px;
+    }
+    .warn-box svg { color: var(--danger); flex-shrink: 0; margin-top: 1px; }
+    .warn-box div { font-size: 13px; color: #991B1B; line-height: 1.7; }
+    .warn-box strong { color: #7F1D1D; }
+
+    .form-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-xl); padding: 28px 26px; box-shadow: var(--shadow-sm);
+    }
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 7px; }
+    .field .hint { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-left: 6px; }
+    .field input {
+      width: 100%; height: 46px; padding: 0 14px; font-size: 15px;
+      background: var(--surface-muted); border: 1.5px solid var(--border);
+      border-radius: var(--radius); color: var(--text); transition: border-color 0.2s;
+    }
+    .field input:focus { border-color: var(--primary); background: var(--surface); }
+    .field-row { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
+    .pwd-toggle { position: relative; }
+    .pwd-toggle button {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      font-size: 13px; color: var(--primary); padding: 4px 8px;
+    }
+    .btn-generate {
+      width: 100%; height: 50px; margin-top: 8px;
+      background: var(--primary); color: #fff; border-radius: var(--radius);
+      font-size: 16px; font-weight: 600; transition: background 0.2s;
+    }
+    .btn-generate:hover { background: var(--primary-dark); }
+
+    .result-card {
+      margin-top: 24px; background: var(--surface); border: 1px solid var(--primary-lighter);
+      border-radius: var(--radius-xl); padding: 24px 22px; display: none;
+    }
+    .result-card.show { display: block; }
+    .result-card h3 { font-size: 16px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .result-card .sub { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+    .code-box {
+      width: 100%; min-height: 96px; padding: 14px; font-family: "SF Mono", Consolas, monospace;
+      font-size: 13px; line-height: 1.5; word-break: break-all; resize: vertical;
+      background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius);
+      color: var(--text);
+    }
+    .btn-copy {
+      display: inline-flex; align-items: center; gap: 8px; margin-top: 12px;
+      height: 44px; padding: 0 22px; background: var(--success); color: #fff;
+      border-radius: var(--radius); font-size: 15px; font-weight: 500; transition: opacity 0.2s;
+    }
+    .btn-copy:hover { opacity: 0.9; }
+    .copy-tip { font-size: 13px; color: var(--success); margin-left: 10px; display: none; }
+
+    .steps { margin-top: 24px; }
+    .step {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 12px;
+      display: flex; gap: 14px;
+    }
+    .step-num {
+      width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+      background: var(--primary-light); color: var(--primary);
+      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;
+    }
+    .step-body { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+    .step-body strong { color: var(--text); }
+    .step-body em { color: var(--danger); font-style: normal; }
+    .step-body code { background: var(--surface-muted); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+
+    .phase-label { display: flex; align-items: center; gap: 10px; margin: 34px 0 14px; font-size: 18px; font-weight: 700; color: var(--text); }
+    .phase-label:first-of-type { margin-top: 0; }
+    .phase-label .n { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+    .phase-label .tag { font-size: 12px; font-weight: 500; color: #fff; background: var(--primary-light); padding: 3px 10px; border-radius: 20px; }
+
+    .install-card { background: linear-gradient(135deg, #EFF6FF, #F5F3FF); border: 1px solid var(--primary-lighter); border-radius: var(--radius-xl); padding: 22px; }
+    .install-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.75; margin-bottom: 16px; }
+    .install-card p strong { color: var(--text); }
+    .btn-import { display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; background: var(--primary); color: #fff; border-radius: var(--radius); font-size: 16px; font-weight: 600; text-decoration: none; transition: background 0.2s; }
+    .btn-import:hover { background: var(--primary-dark); }
+
+    .back-link { display: inline-block; margin-top: 28px; font-size: 14px; color: var(--primary); }
+  </style>
+</head>
+<body>
+
+<nav class="landing-nav">
+  <div class="landing-nav-left">
+    <a href="index.html" style="display:flex;align-items:center;gap:10px;">
+      <svg width="28" height="28" viewBox="0 0 96 96" fill="none">
+        <rect width="96" height="96" rx="22" fill="#3B82F6"/>
+        <g stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" fill="none">
+          <path d="M33.9 45.9 A20 20 0 0 1 62.1 45.9"/>
+          <path d="M25.4 37.4 A32 32 0 0 1 70.6 37.4"/>
+        </g>
+        <path d="M48 52 L61 60 L48 68 L35 60 Z" fill="#FFFFFF"/>
+        <path d="M61.5 62 V70" stroke="#FFD34D" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <circle cx="61.5" cy="72.5" r="2.6" fill="#FFD34D"/>
+      </svg>
+      <span>校园网自动登录</span>
+    </a>
+  </div>
+  <a class="btn-nav-github" href="https://github.com/ZhaoyuanGuo/WLAN-auto-connect" target="_blank" rel="noopener">GitHub</a>
+</nav>
+
+<div class="tool-wrap">
+  <div class="tool-head">
+    <div class="hero-badge">iPhone / iPad 快捷指令 · 剪贴板分享码</div>
+    <h1>生成校园网分享码</h1>
+    <p>此方案在浏览器本地生成一段 <code>CN1:</code> 分享码，复制到剪贴板后由「校园网认证」剪贴板版快捷指令读取认证。<br><strong>提示：这是备选方案，每次登录都要重新复制分享码</strong>；日常自用更推荐 <a href="share.html" style="color:var(--primary)">本机存储 · 自动登录方案 →</a></p>
+  </div>
+
+  <div class="warn-box">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <div>
+      <strong>分享码等同于你的校园网密码。</strong>它在浏览器本地生成、<strong>不经过任何服务器</strong>，但拿到这段码的人可以直接还原出账号密码。请只把它保存在你自己的设备或发给信任的人，不要公开张贴。更换校园网密码后旧码即失效，需重新生成。
+    </div>
+  </div>
+
+  <div class="phase-label"><span class="n">1</span> 安装剪贴板版快捷指令<span class="tag">仅首次</span></div>
+  <div class="install-card">
+    <p>用 <strong>iPhone / iPad 自带的 Safari</strong> 点下方按钮，把「校园网认证」<strong>剪贴板版</strong>快捷指令添加到本机。它<strong>不含任何账号密码</strong>、只在你自己设备上运行，运行时读取剪贴板里的分享码。</p>
+    <a class="btn-import" href="https://www.icloud.com/shortcuts/a7b89a155015496485c1d6689cb4f088" target="_blank" rel="noopener">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+      导入「校园网认证」剪贴板版
+    </a>
+  </div>
+
+  <div class="phase-label"><span class="n">2</span> 生成分享码<span class="tag">填写校园网信息</span></div>
+  <form class="form-card" id="genForm" autocomplete="off">
+    <div class="field-row">
+      <div class="field">
+        <label>认证服务器 IP<span class="hint">已预填辽宁警察学院（LNPC）门户；其他学校请改成自己的（连校园网未认证时看跳转登录页地址栏 http:// 后面那串）</span></label>
+        <input type="text" id="host" value="172.16.200.11" placeholder="如 172.16.200.11" required>
+      </div>
+      <div class="field">
+        <label>端口<span class="hint">eportal 常见 801</span></label>
+        <input type="number" id="eport" value="801" placeholder="801" required>
+      </div>
+    </div>
+    <div class="field">
+      <label>账号<span class="hint">裸账号即可，无需 ,0, 前缀</span></label>
+      <input type="text" id="account" placeholder="校园网登录账号" required>
+    </div>
+    <div class="field">
+      <label>运营商后缀<span class="hint">可留空，多数学校无需</span></label>
+      <input type="text" id="suffix" placeholder="如 ,0, 或留空">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <div class="pwd-toggle">
+        <input type="password" id="password" placeholder="校园网登录密码" required>
+        <button type="button" id="togglePwd">显示</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>备注名<span class="hint">仅用于你自己辨认，可选</span></label>
+      <input type="text" id="note" placeholder="如 宿舍 / 教学楼">
+    </div>
+    <button type="submit" class="btn-generate">生成分享码</button>
+  </form>
+
+  <div class="result-card" id="resultCard">
+    <h3>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--success)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      分享码已生成
+    </h3>
+    <p class="sub">复制下面这段以 <code>CN1:</code> 开头的文本，在 iPhone / iPad 上打开「校园网认证」剪贴板版即可自动读取。</p>
+    <textarea class="code-box" id="codeOut" readonly></textarea>
+    <button type="button" class="btn-copy" id="copyBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      复制到剪贴板
+    </button>
+    <span class="copy-tip" id="copyTip">已复制 ✓</span>
+  </div>
+
+  <div class="phase-label"><span class="n">3</span> 在 iPhone / iPad 上运行认证</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>复制分享码。</strong>在上方「第 2 步」填好信息，点「生成分享码」→「复制到剪贴板」。</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>连上校园 WiFi。</strong>设置 → Wi-Fi 连接学校 WiFi（SSID：<code>LNPC-STU</code>，未认证状态即可），并确保该 SSID 已开启「自动加入」。</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>运行「校园网认证」。</strong>打开剪贴板版快捷指令，它会自动读取剪贴板里的分享码、完成门户认证，并弹出「校园网认证成功」。<em>注意：每次重新登录都要再复制一次分享码。</em></div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>（可选）设为自动运行。</strong>快捷指令底部「自动化」→ 创建个人自动化 → 选「Wi-Fi」连接到学校 WiFi（SSID：<code>LNPC-STU</code>）时 → 添加「运行快捷指令：校园网认证」。以后一连校园网就自动认证，无需手动点。</div>
+    </div>
+  </div>
+
+  <p style="text-align:center;"><a class="back-link" href="share.html">← 返回推荐方案（本机存储 · 自动登录）</a></p>
+  <p style="text-align:center;"><a class="back-link" href="index.html">返回官网首页</a></p>
+</div>
+
+<footer class="landing-footer">
+  <p>校园网自动登录 · 校园网静默认证辅助工具</p>
+  <p class="footer-sub">本工具仅供学习交流与个人校园网自动认证使用，请遵守所在学校/单位的网络管理规定</p>
+</footer>
+
+<script>
+  // 分享码格式：CN1: + Base64(UTF-8 JSON)
+  // 字段：v=版本, h=host, p=eport, a=账号, s=后缀, w=密码, n=备注
+  function encodeShareCode(obj) {
+    const json = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(json); // UTF-8
+    let bin = '';
+    bytes.forEach((b) => { bin += String.fromCharCode(b); });
+    return 'CN1:' + btoa(bin);
+  }
+
+  const form = document.getElementById('genForm');
+  const resultCard = document.getElementById('resultCard');
+  const codeOut = document.getElementById('codeOut');
+  const copyBtn = document.getElementById('copyBtn');
+  const copyTip = document.getElementById('copyTip');
+  const togglePwd = document.getElementById('togglePwd');
+  const pwdInput = document.getElementById('password');
+
+  togglePwd.addEventListener('click', () => {
+    const show = pwdInput.type === 'password';
+    pwdInput.type = show ? 'text' : 'password';
+    togglePwd.textContent = show ? '隐藏' : '显示';
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const obj = {
+      v: 1,
+      h: document.getElementById('host').value.trim(),
+      p: parseInt(document.getElementById('eport').value.trim(), 10) || 801,
+      a: document.getElementById('account').value.trim(),
+      s: document.getElementById('suffix').value,
+      w: pwdInput.value,
+      n: document.getElementById('note').value.trim(),
+    };
+    if (!obj.h || !obj.a || !obj.w) { return; }
+    try {
+      codeOut.value = encodeShareCode(obj);
+    } catch (err) {
+      alert('生成失败：' + err.message);
+      return;
+    }
+    resultCard.classList.add('show');
+    resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    codeOut.select();
+    try {
+      await navigator.clipboard.writeText(codeOut.value);
+    } catch (_) {
+      document.execCommand('copy');
+    }
+    copyTip.style.display = 'inline';
+    setTimeout(() => { copyTip.style.display = 'none'; }, 2000);
+  });
+</script>
+
+</body>
+</html>

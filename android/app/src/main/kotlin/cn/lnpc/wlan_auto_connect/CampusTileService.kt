@@ -23,6 +23,7 @@ class CampusTileService : TileService() {
         android.util.Log.d(TAG, "onClick")
         // 乐观反馈：磁贴立即变蓝，真实结果由 LoginWorker 回写后刷新
         optimistic = true
+        optimisticAt = System.currentTimeMillis()
         val tile = qsTile
         if (tile != null) {
             tile.label = "校园网"
@@ -33,12 +34,18 @@ class CampusTileService : TileService() {
         val appContext = applicationContext
         val request = androidx.work.OneTimeWorkRequestBuilder<LoginWorker>().build()
         androidx.work.WorkManager.getInstance(appContext).enqueueUniqueWork(
-            "cn_login", androidx.work.ExistingWorkPolicy.REPLACE, request
+            LoginWorker.WORK_NAME, androidx.work.ExistingWorkPolicy.REPLACE, request
         )
     }
 
     private fun updateTile() {
         val tile = qsTile ?: return
+        // 乐观态过期兜底：LoginWorker 抛异常、约束不满足或任务被取消时都不会写状态，
+        // 若不设超时，磁贴会永久停在"正在连接..."并与真实状态相反。
+        if (optimistic && System.currentTimeMillis() - optimisticAt > OPTIMISTIC_TTL_MS) {
+            android.util.Log.d(TAG, "乐观态超时，回落到持久化状态")
+            optimistic = false
+        }
         if (optimistic) {
             // 等待 LoginWorker 真实结果期间保持乐观状态，避免 requestListeningState
             // 回调读到旧 prefs 把颜色打回灰色
@@ -72,12 +79,19 @@ class CampusTileService : TileService() {
     companion object {
         private const val TAG = "CampusTile"
 
+        /// 乐观态最长保持时间；超时后回落读持久化状态，避免永久卡在"正在连接..."
+        private const val OPTIMISTIC_TTL_MS = 120_000L
+
         /// 点击后的乐观状态，直到下一次 setStatus（真实结果）落地
         @Volatile
         private var optimistic = false
 
+        @Volatile
+        private var optimisticAt = 0L
+
         fun clearOptimistic() {
             optimistic = false
+            optimisticAt = 0L
         }
 
         /// 状态变化后请求系统回调 onStartListening 以刷新磁贴
