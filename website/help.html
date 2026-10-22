@@ -14,7 +14,7 @@
     .tut-hero h1 { font-size: 36px; letter-spacing: -0.5px; margin-bottom: 12px; }
     .tut-hero p { font-size: 15px; color: var(--text-secondary); line-height: 1.8; }
     .tut-os-hint { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 13px; color: var(--primary-dark); background: var(--primary-light); border: 1px solid var(--primary-lighter); padding: 7px 16px; border-radius: 999px; }
-    .tut-os-hint b { color: var(--primary); }
+    .tut-os-hint b { color: var(--primary-dark); }
     .tut-os-hint svg { flex-shrink: 0; }
 
     /* 平台标签页 */
@@ -26,12 +26,12 @@
       border-bottom: 1px solid var(--border);
     }
     .ttab {
-      display: inline-flex; align-items: center; gap: 7px;
+      display: inline-flex; align-items: center; gap: 7px; min-height: 44px;
       padding: 9px 20px; border-radius: 999px;
       font-size: 14px; font-weight: 600; color: var(--text-secondary);
       border: 1.5px solid transparent; transition: all .18s;
     }
-    .ttab:hover { color: var(--primary); background: var(--primary-light); }
+    .ttab:hover { color: var(--primary-dark); background: var(--primary-light); }
     .ttab.is-active { color: #fff; background: var(--primary); box-shadow: 0 6px 16px rgba(59,130,246,.32); }
     .ttab[data-tab="android"].is-active { background: #0F9D58; box-shadow: 0 6px 16px rgba(15,157,88,.32); }
     .ttab[data-tab="ios"].is-active { background: #7C3AED; box-shadow: 0 6px 16px rgba(124,58,237,.32); }
@@ -74,7 +74,7 @@
     .card:hover { box-shadow: var(--shadow); }
     .card .txt h3 { font-size: 17.5px; margin: 1px 0 7px; }
     .card .txt p { font-size: 14.5px; color: var(--text-secondary); line-height: 1.82; }
-    .card .txt a { color: var(--primary); }
+    .card .txt a { color: var(--primary-dark); }
     .card code { background: var(--surface-muted); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
 
     .media { margin-top: 16px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
@@ -124,7 +124,7 @@
       .media.pair img { width: 100% !important; max-width: 520px !important; }
     }
 
-    .back-home { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; color: var(--primary); }
+    .back-home { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 14px; font-weight: 500; color: var(--primary-dark); }
     .back-home:hover { text-decoration: underline; }
   </style>
 </head>

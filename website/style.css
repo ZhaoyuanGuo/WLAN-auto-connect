@@ -9,13 +9,11 @@
   --surface-muted: #F3F4F6;
   --text: #171717;
   --text-secondary: #4B5563;
-  --text-muted: #9CA3AF;
+  --text-muted: #6B7280;
   --border: #E5E7EB;
-  --border-light: #F3F4F6;
-  --danger: #EF4444;
-  --success: #10B981;
-  --warning: #F59E0B;
-  --gold: #F5C518;
+  --danger: #DC2626;
+  /* 绿只做“成功/已验证”，并且必须是这个深度：#10B981 上压白字只有 2.54，做图标描边也不够 3:1 */
+  --success-deep: #047857;
   --radius: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
@@ -65,9 +63,11 @@ a { text-decoration: none; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: 44px;
+  white-space: nowrap;
   font-size: 14px;
   font-weight: 500;
-  color: var(--primary);
+  color: var(--primary-dark);
   padding: 8px 20px;
   border-radius: var(--radius-full);
   border: 1.5px solid var(--primary);
@@ -90,7 +90,7 @@ a { text-decoration: none; }
   display: inline-block;
   font-size: 12px;
   font-weight: 500;
-  color: var(--primary);
+  color: var(--primary-dark);
   background: var(--primary-light);
   padding: 4px 14px;
   border-radius: var(--radius-full);
@@ -143,7 +143,7 @@ a { text-decoration: none; }
   font-weight: 500;
   transition: all 0.2s;
 }
-.btn-hero-secondary:hover { border-color: var(--primary); color: var(--primary); }
+.btn-hero-secondary:hover { border-color: var(--primary); color: var(--primary-dark); }
 
 /* Hero 模拟界面 */
 .hero-visual { flex-shrink: 0; }
@@ -175,8 +175,8 @@ a { text-decoration: none; }
 .mockup-avatar {
   width: 32px; height: 32px;
   border-radius: var(--radius-full);
-  background: var(--primary-lighter);
-  color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-dark);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -288,7 +288,7 @@ a { text-decoration: none; }
   left: 0; top: 50%;
   transform: translateY(-50%);
   width: 16px; height: 16px;
-  background: var(--success);
+  background: var(--success-deep);
   border-radius: 50%;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -356,6 +356,10 @@ a { text-decoration: none; }
 @media (max-width: 768px) {
   .landing-nav { padding: 0 16px; height: 56px; }
   .landing-nav-left span { font-size: 15px; }
+  /* 窄屏下导航位不够：藏掉图标 + 收窄 padding，否则中文会折行撑破 56px 条
+     （.btn-nav-help 定义在 index.html 自己的 <style> 里，它的 padding 在那边改） */
+  .btn-nav-github svg, .btn-nav-help svg { display: none; }
+  .btn-nav-github { padding: 8px 14px; }
   .hero { flex-direction: column; text-align: center; padding: 40px 20px 60px; }
   .hero h1 { font-size: 30px; }
   .hero-tagline { font-size: 16px; }
@@ -377,4 +381,14 @@ a { text-decoration: none; }
 /* 平板竖屏：下载卡片两列 */
 @media (min-width: 769px) and (max-width: 1024px) {
   .download-platforms { grid-template-columns: 1fr 1fr; }
+}
+
+/* 动效分寸：系统要求减少动效时，一切位移/淡入退化为直接切换（DESIGN.md §5） */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
   <meta name="description" content="iPhone / iPad 校园网自动登录：导入快捷指令一次，首次运行输入账号密码只存本机，以后一连校园网就自动登录。账号密码不上传任何服务器。">
-  <title>iPhone / iPad 校园网自动登录 - 校园网自动登录</title>
+  <title>iPhone / iPad 快捷指令 - 辽宁警察学院校园网自动登录</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
   <style>
@@ -22,17 +22,17 @@
     }
     .step-num {
       width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
-      background: var(--primary-light); color: var(--primary);
+      background: var(--primary-light); color: var(--primary-dark);
       display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;
     }
     .step-body { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
     .step-body strong { color: var(--text); }
     .step-body code { background: var(--surface-muted); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
 
-    .phase-label { display: flex; align-items: center; gap: 10px; margin: 34px 0 14px; font-size: 18px; font-weight: 700; color: var(--text); }
+    .phase-label { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 34px 0 14px; font-size: 18px; font-weight: 700; color: var(--text); }
     .phase-label:first-of-type { margin-top: 0; }
     .phase-label .n { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; }
-    .phase-label .tag { font-size: 12px; font-weight: 500; color: #fff; background: var(--primary-light); padding: 3px 10px; border-radius: 20px; }
+    .phase-label .tag { font-size: 12px; font-weight: 500; color: var(--primary-dark); background: var(--primary-light); padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
 
     .install-card { background: linear-gradient(135deg, #EFF6FF, #F5F3FF); border: 1px solid var(--primary-lighter); border-radius: var(--radius-xl); padding: 22px; }
     .install-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.75; margin-bottom: 16px; }
@@ -41,8 +41,8 @@
     .btn-import:hover { background: var(--primary-dark); }
 
     .alt-link { margin-top: 34px; text-align: center; font-size: 14px; color: var(--text-muted); line-height: 1.8; }
-    .alt-link a { color: var(--primary); }
-    .back-link { display: inline-block; margin-top: 18px; font-size: 14px; color: var(--primary); }
+    .alt-link a { color: var(--primary-dark); }
+    .back-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 12px; font-size: 14px; color: var(--primary-dark); }
   </style>
 </head>
 <body>

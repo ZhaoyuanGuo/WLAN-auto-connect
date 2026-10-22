@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
   <meta name="description" content="校园网快捷指令分享码生成器 —— 在浏览器本地生成 iPhone / iPad 剪贴板版快捷指令可读取的分享码，账号密码不上传任何服务器。">
-  <title>剪贴板分享码生成器 - 校园网自动登录</title>
+  <title>剪贴板分享码生成器 - 辽宁警察学院校园网自动登录</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
   <style>
@@ -40,7 +40,7 @@
     .pwd-toggle { position: relative; }
     .pwd-toggle button {
       position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-      font-size: 13px; color: var(--primary); padding: 4px 8px;
+      font-size: 13px; color: var(--primary-dark); padding: 4px 10px; min-height: 44px;
     }
     .btn-generate {
       width: 100%; height: 50px; margin-top: 8px;
@@ -64,11 +64,11 @@
     }
     .btn-copy {
       display: inline-flex; align-items: center; gap: 8px; margin-top: 12px;
-      height: 44px; padding: 0 22px; background: var(--success); color: #fff;
+      height: 44px; padding: 0 22px; background: var(--success-deep); color: #fff;
       border-radius: var(--radius); font-size: 15px; font-weight: 500; transition: opacity 0.2s;
     }
     .btn-copy:hover { opacity: 0.9; }
-    .copy-tip { font-size: 13px; color: var(--success); margin-left: 10px; display: none; }
+    .copy-tip { font-size: 13px; color: var(--success-deep); margin-left: 10px; display: none; }
 
     .steps { margin-top: 24px; }
     .step {
@@ -78,7 +78,7 @@
     }
     .step-num {
       width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
-      background: var(--primary-light); color: var(--primary);
+      background: var(--primary-light); color: var(--primary-dark);
       display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;
     }
     .step-body { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
@@ -86,10 +86,10 @@
     .step-body em { color: var(--danger); font-style: normal; }
     .step-body code { background: var(--surface-muted); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
 
-    .phase-label { display: flex; align-items: center; gap: 10px; margin: 34px 0 14px; font-size: 18px; font-weight: 700; color: var(--text); }
+    .phase-label { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 34px 0 14px; font-size: 18px; font-weight: 700; color: var(--text); }
     .phase-label:first-of-type { margin-top: 0; }
     .phase-label .n { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; }
-    .phase-label .tag { font-size: 12px; font-weight: 500; color: #fff; background: var(--primary-light); padding: 3px 10px; border-radius: 20px; }
+    .phase-label .tag { font-size: 12px; font-weight: 500; color: var(--primary-dark); background: var(--primary-light); padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
 
     .install-card { background: linear-gradient(135deg, #EFF6FF, #F5F3FF); border: 1px solid var(--primary-lighter); border-radius: var(--radius-xl); padding: 22px; }
     .install-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.75; margin-bottom: 16px; }
@@ -97,7 +97,7 @@
     .btn-import { display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; background: var(--primary); color: #fff; border-radius: var(--radius); font-size: 16px; font-weight: 600; text-decoration: none; transition: background 0.2s; }
     .btn-import:hover { background: var(--primary-dark); }
 
-    .back-link { display: inline-block; margin-top: 28px; font-size: 14px; color: var(--primary); }
+    .back-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 20px; font-size: 14px; color: var(--primary-dark); }
   </style>
 </head>
 <body>
@@ -125,7 +125,7 @@
   <div class="tool-head">
     <div class="hero-badge">iPhone / iPad 快捷指令 · 剪贴板分享码</div>
     <h1>生成校园网分享码</h1>
-    <p>此方案在浏览器本地生成一段 <code>CN1:</code> 分享码，复制到剪贴板后由「校园网认证」剪贴板版快捷指令读取认证。<br><strong>提示：这是备选方案，每次登录都要重新复制分享码</strong>；日常自用更推荐 <a href="share.html" style="color:var(--primary)">本机存储 · 自动登录方案 →</a></p>
+    <p>此方案在浏览器本地生成一段 <code>CN1:</code> 分享码，复制到剪贴板后由「校园网认证」剪贴板版快捷指令读取认证。<br><strong>提示：这是备选方案，每次登录都要重新复制分享码</strong>；日常自用更推荐 <a href="share.html" style="color:var(--primary-dark)">本机存储 · 自动登录方案 →</a></p>
   </div>
 
   <div class="warn-box">
@@ -180,7 +180,7 @@
 
   <div class="result-card" id="resultCard">
     <h3>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--success)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--success-deep)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
       分享码已生成
     </h3>
     <p class="sub">复制下面这段以 <code>CN1:</code> 开头的文本，在 iPhone / iPad 上打开「校园网认证」剪贴板版即可自动读取。</p>

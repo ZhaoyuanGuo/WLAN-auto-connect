@@ -18,7 +18,7 @@
     .dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
     .dlg-head h4 { font-size: 18px; margin-bottom: 4px; }
     .dlg-head p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
-    .dlg-close { background: none; border: none; font-size: 26px; line-height: 1; color: var(--text-muted); cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+    .dlg-close { background: none; border: none; font-size: 26px; line-height: 1; color: var(--text-muted); cursor: pointer; padding: 0 2px; flex-shrink: 0; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
     .dlg-close:hover { color: var(--text); }
     .dlg-opts { margin-top: 16px; }
     .dlg-opt { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; text-decoration: none; color: var(--text); transition: border-color .15s, background .15s; }
@@ -27,18 +27,21 @@
     .dlg-opt .txt { flex: 1; min-width: 0; }
     .dlg-opt .txt b { display: block; font-size: 15px; margin-bottom: 2px; }
     .dlg-opt .txt span { font-size: 12px; color: var(--text-muted); }
-    .dlg-opt .tag { font-size: 11px; font-weight: 600; color: var(--primary); background: var(--primary-lighter); padding: 2px 8px; border-radius: 20px; flex-shrink: 0; }
+    .dlg-opt .tag { font-size: 11px; font-weight: 600; color: var(--primary-dark); background: var(--primary-light); padding: 2px 8px; border-radius: 20px; flex-shrink: 0; }
     .dlg-foot { margin-top: 6px; font-size: 11px; color: var(--text-muted); text-align: center; }
 
     /* 顶部导航右侧按钮组 + 使用教程入口 */
     .landing-nav-right { display: flex; align-items: center; gap: 10px; }
     .btn-nav-help {
-      display: inline-flex; align-items: center; gap: 6px;
+      display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
+      white-space: nowrap;
       font-size: 14px; font-weight: 500; color: var(--text-secondary);
       padding: 8px 18px; border-radius: var(--radius-full);
       border: 1.5px solid var(--border); transition: all 0.2s;
     }
-    .btn-nav-help:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+    .btn-nav-help:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-light); }
+    /* 窄屏：图标已由 style.css 藏掉，这里再收窄 padding，避免两个按钮挤不下而折行 */
+    @media (max-width: 768px) { .btn-nav-help { padding: 8px 12px; } }
 
     /* 下载区「使用教程」引导横幅 */
     .help-banner {
@@ -50,7 +53,7 @@
     }
     .help-banner .hb-text { font-weight: 500; }
     .help-banner .hb-btn {
-      display: inline-flex; align-items: center; gap: 7px;
+      display: inline-flex; align-items: center; gap: 7px; min-height: 44px;
       color: #fff; background: var(--primary); padding: 9px 20px;
       border-radius: var(--radius); font-size: 14px; font-weight: 500; transition: background 0.2s;
     }
